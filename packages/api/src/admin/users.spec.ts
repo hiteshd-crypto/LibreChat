@@ -186,7 +186,7 @@ describe('createAdminUsersHandlers', () => {
       expect(response.capped).toBe(true);
     });
 
-    it('searches name, email, and username with anchored prefix regex', async () => {
+    it('searches name, email, and username with a case-insensitive substring regex', async () => {
       const findUsers = jest.fn().mockResolvedValue([]);
       const deps = createDeps({ findUsers });
       const handlers = createAdminUsersHandlers(deps);
@@ -199,7 +199,8 @@ describe('createAdminUsersHandlers', () => {
       expect(filter.$or[0]).toHaveProperty('name');
       expect(filter.$or[1]).toHaveProperty('email');
       expect(filter.$or[2]).toHaveProperty('username');
-      expect(filter.$or[0].name.source).toBe('^test');
+      expect(filter.$or[0].name.source).toBe('test');
+      expect(filter.$or[0].name.flags).toContain('i');
     });
 
     it('projects username in the field selection', async () => {
@@ -224,7 +225,7 @@ describe('createAdminUsersHandlers', () => {
 
       const filter = findUsers.mock.calls[0][0];
       expect(filter.$or[0].name).toBeInstanceOf(RegExp);
-      expect(filter.$or[0].name.source).toBe('^test\\.user\\+1');
+      expect(filter.$or[0].name.source).toBe('test\\.user\\+1');
     });
 
     it('returns 400 when query is missing', async () => {

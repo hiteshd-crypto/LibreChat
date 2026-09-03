@@ -31,28 +31,31 @@ export default function UserConversationsView() {
     );
   } else {
     body = (
-      <ul className="flex flex-col gap-1">
-        {conversations.map((convo) => (
-          <li key={convo.conversationId}>
-            <button
-              type="button"
-              className="w-full rounded-lg border border-border-light px-3 py-2 text-left hover:bg-surface-hover"
-              onClick={() =>
-                navigate(
-                  `/admin/users/${encodeURIComponent(userId)}/c/${encodeURIComponent(
-                    convo.conversationId ?? '',
-                  )}`,
-                  { state: { name } },
-                )
-              }
-            >
-              <span className="text-sm text-text-primary">
-                {convo.title || localize('com_ui_untitled')}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-text-secondary">{localize('com_admin_viewer_list_hint')}</p>
+        <ul className="flex flex-col gap-1">
+          {conversations.map((convo) => (
+            <li key={convo.conversationId}>
+              <button
+                type="button"
+                className="w-full rounded-lg border border-border-light px-3 py-2 text-left hover:bg-surface-hover"
+                onClick={() =>
+                  navigate(
+                    `/admin/users/${encodeURIComponent(userId)}/c/${encodeURIComponent(
+                      convo.conversationId ?? '',
+                    )}`,
+                    { state: { name } },
+                  )
+                }
+              >
+                <span className="text-sm text-text-primary">
+                  {convo.title || localize('com_ui_untitled')}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     );
   }
 

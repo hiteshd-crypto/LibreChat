@@ -43,6 +43,7 @@
   "com_admin_viewer_back_to_users": "Back to users",
   "com_admin_viewer_banner": "Viewing {{0}}’s conversations — read only",
   "com_admin_viewer_load_error": "Failed to load messages.",
+  "com_admin_viewer_list_hint": "Select a conversation to view its messages — read only.",
   "com_admin_viewer_load_more": "Load more",
   "com_admin_viewer_no_conversations": "This user has no conversations.",
   "com_agents_agent_card_label": "{{name}} agent. {{description}}",

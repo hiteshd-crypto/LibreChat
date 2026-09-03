@@ -132,7 +132,7 @@ export function createAdminUsersHandlers(deps: AdminUsersDeps): {
 
       const searchLimit = Math.min(Math.max(1, parseInt(limitStr, 10) || 20), 50);
       const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`^${escaped}`, 'i');
+      const regex = new RegExp(escaped, 'i');
 
       const users = await findUsers(
         { $or: [{ name: regex }, { email: regex }, { username: regex }] },
