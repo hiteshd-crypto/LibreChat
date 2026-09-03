@@ -15,7 +15,7 @@ import type {
   UseQueryOptions,
 } from '@tanstack/react-query';
 
-const MEMBERS_PAGE_SIZE = 20;
+export const MEMBERS_PAGE_SIZE = 20;
 const USERS_PAGE_SIZE = 25;
 const USER_SEARCH_LIMIT = 20;
 const CONVERSATIONS_PAGE_SIZE = 25;

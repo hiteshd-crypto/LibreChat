@@ -7,6 +7,12 @@ import { useAuthContext } from '~/hooks';
  * non-admins (render it early), or `null` for admins. This is defense in
  * depth only — the real enforcement is the capability middleware on
  * `/api/admin/*`.
+ *
+ * Gates on the ADMIN role rather than the `ACCESS_ADMIN` capability the
+ * backend checks. For the standard ADMIN/USER model these are equivalent;
+ * a custom role granted `ACCESS_ADMIN` would pass the API but be redirected
+ * here. Making this capability-aware needs a capability query — deliberately
+ * out of scope for the role-only gating this feature ships with.
  */
 export function useAdminGuard(): React.ReactElement | null {
   const { user } = useAuthContext();

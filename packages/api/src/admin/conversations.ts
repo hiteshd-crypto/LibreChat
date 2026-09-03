@@ -49,6 +49,10 @@ const clampLimit = (raw: unknown): number => {
 const stringParam = (raw: unknown): string | undefined =>
   typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : undefined;
 
+/** Mirror of `getConvosByCursor`'s own whitelist, so bad input is a 400 not a 500. */
+const SORT_FIELDS = new Set(['title', 'createdAt', 'updatedAt', 'archivedAt']);
+const SORT_DIRECTIONS = new Set(['asc', 'desc']);
+
 export function createAdminUserConversationsHandlers(deps: AdminUserConversationsDeps): HandlerSet {
   const { findUsers, getConvosByCursor, getConvo, getMessages } = deps;
 
@@ -71,13 +75,19 @@ export function createAdminUserConversationsHandlers(deps: AdminUserConversation
         return res.status(404).json({ error: 'User not found' });
       }
 
+      const sortBy = stringParam(req.query.sortBy) ?? 'updatedAt';
+      const sortDirection = stringParam(req.query.sortDirection) ?? 'desc';
+      if (!SORT_FIELDS.has(sortBy) || !SORT_DIRECTIONS.has(sortDirection)) {
+        return res.status(400).json({ error: 'Invalid sort parameter' });
+      }
+
       const result = await getConvosByCursor(userId, {
         cursor: stringParam(req.query.cursor) ?? null,
         limit: clampLimit(req.query.limit),
         isArchived: req.query.isArchived === 'true',
         search: stringParam(req.query.search),
-        sortBy: stringParam(req.query.sortBy) ?? 'updatedAt',
-        sortDirection: stringParam(req.query.sortDirection) ?? 'desc',
+        sortBy,
+        sortDirection,
       });
       return res.status(200).json(result);
     } catch (error) {

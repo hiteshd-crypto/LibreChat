@@ -4,8 +4,8 @@ import { buildTree } from 'librechat-data-provider';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { ShareMessagesProvider } from '~/components/Share/ShareMessagesProvider';
+import { useAdminUserConversation, useAdminUserMessages } from '~/data-provider';
 import MessagesView from '~/components/Share/MessagesView';
-import { useAdminUserMessages } from '~/data-provider';
 import ViewingBanner from './ViewingBanner';
 import { ShareContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
@@ -17,6 +17,7 @@ export default function ConversationTranscript() {
   const { state } = useLocation() as { state?: { name?: string } };
   const name = state?.name ?? userId;
 
+  const { data: conversation } = useAdminUserConversation(userId, conversationId);
   const { data: messages, isLoading, isError } = useAdminUserMessages(userId, conversationId);
   const messagesTree = useMemo(
     () => (messages && messages.length ? buildTree({ messages }) : null),
@@ -52,6 +53,9 @@ export default function ConversationTranscript() {
       >
         {localize('com_admin_viewer_back_to_conversations')}
       </button>
+      {conversation?.title ? (
+        <h2 className="px-1 pb-2 text-sm font-medium text-text-primary">{conversation.title}</h2>
+      ) : null}
       {body}
     </div>
   );

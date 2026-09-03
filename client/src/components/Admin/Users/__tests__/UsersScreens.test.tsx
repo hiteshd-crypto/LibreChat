@@ -10,6 +10,7 @@ const routeState: { userId?: string; conversationId?: string; locationState?: un
 const mockUseAdminUsers = jest.fn();
 const mockUseAdminUserSearch = jest.fn();
 const mockUseAdminUserConversations = jest.fn();
+const mockUseAdminUserConversation = jest.fn();
 const mockUseAdminUserMessages = jest.fn();
 
 jest.mock('react-router-dom', () => ({
@@ -29,6 +30,7 @@ jest.mock('~/data-provider', () => ({
   useAdminUsers: (...args: unknown[]) => mockUseAdminUsers(...args),
   useAdminUserSearch: (...args: unknown[]) => mockUseAdminUserSearch(...args),
   useAdminUserConversations: (...args: unknown[]) => mockUseAdminUserConversations(...args),
+  useAdminUserConversation: (...args: unknown[]) => mockUseAdminUserConversation(...args),
   useAdminUserMessages: (...args: unknown[]) => mockUseAdminUserMessages(...args),
 }));
 
@@ -69,6 +71,7 @@ beforeEach(() => {
   mockUseAdminUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
   mockUseAdminUserSearch.mockReturnValue({ data: { users: [] }, isLoading: false });
   mockUseAdminUserConversations.mockReturnValue({ data: { pages: [] }, isLoading: false });
+  mockUseAdminUserConversation.mockReturnValue({ data: undefined });
   mockUseAdminUserMessages.mockReturnValue({ data: [], isLoading: false });
 });
 
@@ -115,7 +118,8 @@ describe('UserConversationsView', () => {
 });
 
 describe('ConversationTranscript', () => {
-  it('renders messages read-only with no composer', () => {
+  it('renders messages read-only with the conversation title and no composer', () => {
+    mockUseAdminUserConversation.mockReturnValue({ data: { title: 'Trip plan' } });
     mockUseAdminUserMessages.mockReturnValue({
       data: [
         { messageId: 'm1', parentMessageId: null, text: 'hello', conversationId: 'c1' },
@@ -124,6 +128,7 @@ describe('ConversationTranscript', () => {
       isLoading: false,
     });
     render(<ConversationTranscript />);
+    expect(screen.getByText('Trip plan')).toBeInTheDocument();
     expect(screen.getByText('hello')).toBeInTheDocument();
     expect(screen.getByText('hi there')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();

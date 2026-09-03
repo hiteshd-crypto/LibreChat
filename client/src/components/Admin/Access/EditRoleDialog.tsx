@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { SystemRoles } from 'librechat-data-provider';
 import {
   OGDialog,
   OGDialogTemplate,
@@ -14,9 +13,8 @@ import {
 import type { TAdminRole } from 'librechat-data-provider';
 import { useUpdateRole, useDeleteRole } from '~/data-provider';
 import RoleMembersPanel from './RoleMembersPanel';
+import { SYSTEM_ROLES } from './constants';
 import { useLocalize } from '~/hooks';
-
-const SYSTEM_ROLES = new Set<string>([SystemRoles.ADMIN, SystemRoles.USER]);
 
 export default function EditRoleDialog({
   role,
@@ -49,12 +47,16 @@ export default function EditRoleDialog({
   const error = updateMutation.error?.message ?? deleteMutation.error?.message;
 
   const saveDetails = () => {
+    const trimmedName = name.trim();
+    const trimmedDescription = description.trim();
     updateMutation.mutate(
       {
         name: role.name,
         updates: {
-          name: name.trim() && name.trim() !== role.name ? name.trim() : undefined,
-          description: description.trim() || undefined,
+          name: trimmedName && trimmedName !== role.name ? trimmedName : undefined,
+          // Send the empty string (not undefined) so an existing description can be cleared.
+          description:
+            trimmedDescription !== (role.description ?? '') ? trimmedDescription : undefined,
         },
       },
       { onSuccess: () => onClose() },

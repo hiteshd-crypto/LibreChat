@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Spinner } from '@librechat/client';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -13,8 +12,7 @@ export default function UserConversationsView() {
   const { state } = useLocation() as { state?: { name?: string } };
   const name = state?.name ?? userId;
 
-  const [search] = useState('');
-  const query = useAdminUserConversations(userId, { search });
+  const query = useAdminUserConversations(userId);
 
   const conversations = (query.data?.pages ?? []).flatMap((p) => p.conversations);
 

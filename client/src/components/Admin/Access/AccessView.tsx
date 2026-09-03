@@ -1,15 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { SystemRoles } from 'librechat-data-provider';
 import { Button, Input, Spinner } from '@librechat/client';
 import type { TAdminRole } from 'librechat-data-provider';
 import CreateRoleDialog from './CreateRoleDialog';
 import { useAdminRoles } from '~/data-provider';
 import EditRoleDialog from './EditRoleDialog';
+import { SYSTEM_ROLES } from './constants';
 import { useLocalize } from '~/hooks';
 import RoleRow from './RoleRow';
-
-const SYSTEM_ROLES = new Set<string>([SystemRoles.ADMIN, SystemRoles.USER]);
 
 export default function AccessView() {
   const localize = useLocalize();
@@ -60,7 +58,6 @@ export default function AccessView() {
             role={role}
             isSystem={SYSTEM_ROLES.has(role.name)}
             onEdit={() => setEditTarget(role)}
-            onDelete={SYSTEM_ROLES.has(role.name) ? undefined : () => setEditTarget(role)}
           />
         ))
       )}

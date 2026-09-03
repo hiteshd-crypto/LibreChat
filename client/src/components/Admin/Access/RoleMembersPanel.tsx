@@ -7,6 +7,7 @@ import {
   useAdminUserSearch,
   useAddRoleMember,
   useRemoveRoleMember,
+  MEMBERS_PAGE_SIZE,
 } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 
@@ -30,7 +31,7 @@ export default function RoleMembersPanel({ roleName }: { roleName: string }) {
 
   const members = membersQuery.data?.members ?? [];
   const total = membersQuery.data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / 20));
+  const totalPages = Math.max(1, Math.ceil(total / MEMBERS_PAGE_SIZE));
   const error = addMutation.error?.message ?? removeMutation.error?.message;
 
   let memberList: ReactNode;

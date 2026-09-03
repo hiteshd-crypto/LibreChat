@@ -124,6 +124,20 @@ describe('createAdminUserConversationsHandlers', () => {
       expect(deps.getConvosByCursor).not.toHaveBeenCalled();
     });
 
+    it('returns 400 for an unknown sortBy instead of hitting the model', async () => {
+      const deps = createDeps();
+      const handlers = createAdminUserConversationsHandlers(deps);
+      const { req, res, status } = createReqRes({
+        params: { userId: ownerId },
+        query: { sortBy: 'bogus' },
+      });
+
+      await handlers.listUserConversations(req, res);
+
+      expect(status).toHaveBeenCalledWith(400);
+      expect(deps.getConvosByCursor).not.toHaveBeenCalled();
+    });
+
     it('returns 404 for an unknown userId', async () => {
       const deps = createDeps({ findUsers: jest.fn().mockResolvedValue([]) });
       const handlers = createAdminUserConversationsHandlers(deps);

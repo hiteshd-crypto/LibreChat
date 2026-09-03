@@ -102,11 +102,11 @@ function UnifiedSidebar() {
   }, [navigate]);
 
   const handlePanelExpand = useCallback(() => {
-    if (isInsightsRoute) {
+    if (isFullPageRoute) {
       handleLeaveInsights();
     }
     handleExpand();
-  }, [handleExpand, handleLeaveInsights, isInsightsRoute]);
+  }, [handleExpand, handleLeaveInsights, isFullPageRoute]);
 
   const handleResizeStart = useCallback(() => {
     setIsResizing(true);
