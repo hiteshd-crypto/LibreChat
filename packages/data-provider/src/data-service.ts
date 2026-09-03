@@ -1,6 +1,7 @@
 import type { AxiosResponse } from 'axios';
 import type { TInsightsAccessResponse, TInsightsParams, TInsightsResponse } from './types/insights';
 import type { TFileConfig } from './file-config';
+import type * as adm from './types/admin';
 import type * as t from './types';
 import * as permissions from './accessPermissions';
 import * as endpoints from './api-endpoints';
@@ -1340,6 +1341,77 @@ export function listRoles(): Promise<q.ListRolesResponse> {
 
 export function getRole(roleName: string): Promise<r.TRole> {
   return request.get(endpoints.getRole(roleName));
+}
+
+/* Admin — roles CRUD + membership (backed by /api/admin/roles*) */
+export function listAdminRoles(): Promise<adm.TAdminRoleListResponse> {
+  return request.get(`${endpoints.adminRoles()}?limit=200`);
+}
+
+export function createAdminRole(body: {
+  name: string;
+  description?: string;
+}): Promise<{ role: adm.TAdminRole }> {
+  return request.post(endpoints.adminRoles(), body);
+}
+
+export function updateAdminRole(
+  name: string,
+  body: { name?: string; description?: string },
+): Promise<{ role: adm.TAdminRole }> {
+  return request.patch(endpoints.adminRole(name), body);
+}
+
+export function deleteAdminRole(name: string): Promise<{ success: true }> {
+  return request.delete(endpoints.adminRole(name));
+}
+
+export function listAdminRoleMembers(
+  name: string,
+  params?: { limit?: number; offset?: number },
+): Promise<adm.TAdminMemberListResponse> {
+  return request.get(endpoints.adminRoleMembers(name, params));
+}
+
+export function addAdminRoleMember(name: string, userId: string): Promise<{ success: true }> {
+  return request.post(endpoints.adminRoleMembers(name), { userId });
+}
+
+export function removeAdminRoleMember(name: string, userId: string): Promise<{ success: true }> {
+  return request.delete(endpoints.adminRoleMember(name, userId));
+}
+
+/* Admin — users + read-only conversation viewer */
+export function listAdminUsers(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<adm.TAdminUserListResponse> {
+  return request.get(endpoints.adminUsers(params));
+}
+
+export function searchAdminUsers(q: string, limit?: number): Promise<adm.TAdminUserSearchResponse> {
+  return request.get(endpoints.adminUserSearch(q, limit));
+}
+
+export function listAdminUserConversations(
+  userId: string,
+  params?: { cursor?: string; limit?: number; search?: string },
+): Promise<adm.TAdminUserConversationsResponse> {
+  return request.get(endpoints.adminUserConversations(userId, params));
+}
+
+export function getAdminUserConversation(
+  userId: string,
+  conversationId: string,
+): Promise<t.TConversation> {
+  return request.get(endpoints.adminUserConversation(userId, conversationId));
+}
+
+export function getAdminUserConversationMessages(
+  userId: string,
+  conversationId: string,
+): Promise<adm.TAdminUserMessagesResponse> {
+  return request.get(endpoints.adminUserConversationMessages(userId, conversationId));
 }
 
 export function updatePromptPermissions(

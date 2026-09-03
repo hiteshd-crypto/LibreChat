@@ -501,6 +501,28 @@ export const toolFavorite = (itemType: string, itemId: string) =>
 /* Roles */
 export const roles = () => `${BASE_URL}/api/roles`;
 export const adminRoles = () => `${BASE_URL}/api/admin/roles`;
+export const adminRole = (name: string) => `${adminRoles()}/${encodeURIComponent(name)}`;
+export const adminRoleMembers = (name: string, params?: { limit?: number; offset?: number }) =>
+  `${adminRole(name)}/members${buildQuery(params ?? {})}`;
+export const adminRoleMember = (name: string, userId: string) =>
+  `${adminRole(name)}/members/${encodeURIComponent(userId)}`;
+export const adminUsers = (params?: { limit?: number; offset?: number }) =>
+  `${BASE_URL}/api/admin/users${buildQuery(params ?? {})}`;
+export const adminUserSearch = (q: string, limit?: number) =>
+  `${BASE_URL}/api/admin/users/search${buildQuery({ q, limit })}`;
+export const adminUserConversations = (
+  userId: string,
+  params?: { cursor?: string; limit?: number; search?: string },
+) =>
+  `${BASE_URL}/api/admin/users/${encodeURIComponent(userId)}/conversations${buildQuery(
+    params ?? {},
+  )}`;
+export const adminUserConversation = (userId: string, conversationId: string) =>
+  `${BASE_URL}/api/admin/users/${encodeURIComponent(userId)}/conversations/${encodeURIComponent(
+    conversationId,
+  )}`;
+export const adminUserConversationMessages = (userId: string, conversationId: string) =>
+  `${adminUserConversation(userId, conversationId)}/messages`;
 export const getRole = (roleName: string) => `${roles()}/${encodeURIComponent(roleName)}`;
 export const updatePromptPermissions = (roleName: string) => `${getRole(roleName)}/prompts`;
 export const updateMemoryPermissions = (roleName: string) => `${getRole(roleName)}/memories`;
