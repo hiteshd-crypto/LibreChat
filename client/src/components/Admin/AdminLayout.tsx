@@ -1,12 +1,10 @@
-import { ChevronLeft } from 'lucide-react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { useAdminGuard } from './guard';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
 export default function AdminLayout() {
   const localize = useLocalize();
-  const navigate = useNavigate();
   const redirect = useAdminGuard();
   if (redirect) {
     return redirect;
@@ -31,15 +29,7 @@ export default function AdminLayout() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-surface-primary">
-      <header className="flex flex-col gap-2 border-b border-border-light px-6 pt-4">
-        <button
-          type="button"
-          onClick={() => navigate('/c/new')}
-          className="-ml-1 flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs text-text-secondary transition-colors hover:text-text-primary"
-        >
-          <ChevronLeft className="size-3.5" aria-hidden="true" />
-          {localize('com_admin_back_to_chat')}
-        </button>
+      <header className="flex flex-col gap-3 border-b border-border-light px-6 pt-5">
         <h1 className="text-lg font-semibold text-text-primary">
           {localize('com_admin_nav_title')}
         </h1>
