@@ -1348,13 +1348,6 @@ export function listAdminRoles(): Promise<adm.TAdminRoleListResponse> {
   return request.get(`${endpoints.adminRoles()}?limit=200`);
 }
 
-export function createAdminRole(body: {
-  name: string;
-  description?: string;
-}): Promise<{ role: adm.TAdminRole }> {
-  return request.post(endpoints.adminRoles(), body);
-}
-
 export function updateAdminRole(
   name: string,
   body: { name?: string; description?: string },

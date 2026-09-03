@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react';
 import AccessView from '../AccessView';
 
 const mockUseAdminRoles = jest.fn();
-const mockCreateMutate = jest.fn();
 const mockUpdateMutate = jest.fn();
 const mockDeleteMutate = jest.fn();
 
@@ -16,7 +15,6 @@ const idleMutation = (mutate: jest.Mock) => ({
 
 jest.mock('~/data-provider', () => ({
   useAdminRoles: () => mockUseAdminRoles(),
-  useCreateRole: () => idleMutation(mockCreateMutate),
   useUpdateRole: () => idleMutation(mockUpdateMutate),
   useDeleteRole: () => idleMutation(mockDeleteMutate),
   useAdminRoleMembers: () => ({ data: { members: [], total: 0 }, isLoading: false }),
@@ -76,21 +74,14 @@ describe('AccessView', () => {
     expect(screen.getByText('com_admin_access_load_error')).toBeInTheDocument();
   });
 
-  it('opens the create dialog and submits a new role', async () => {
+  it('has no create-role affordance', () => {
     mockUseAdminRoles.mockReturnValue({
       data: { roles: [{ name: 'ADMIN' }], total: 1 },
       isLoading: false,
       isError: false,
     });
     render(<AccessView />);
-    await userEvent.click(screen.getByText('com_admin_access_create_role'));
-    const nameInput = screen.getByRole('dialog').querySelector('input') as HTMLInputElement;
-    await userEvent.type(nameInput, 'support');
-    await userEvent.click(screen.getByText('com_ui_create'));
-    expect(mockCreateMutate).toHaveBeenCalledWith(
-      { name: 'support', description: undefined },
-      expect.anything(),
-    );
+    expect(screen.queryByText(/create role/i)).not.toBeInTheDocument();
   });
 
   it('filters roles by the search box', async () => {

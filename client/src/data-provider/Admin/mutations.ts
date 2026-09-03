@@ -3,17 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type { TAdminRole } from 'librechat-data-provider';
 
-export const useCreateRole = (): UseMutationResult<
-  { role: TAdminRole },
-  Error,
-  { name: string; description?: string }
-> => {
-  const queryClient = useQueryClient();
-  return useMutation((body) => dataService.createAdminRole(body), {
-    onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminRoles]),
-  });
-};
-
 export const useUpdateRole = (): UseMutationResult<
   { role: TAdminRole },
   Error,

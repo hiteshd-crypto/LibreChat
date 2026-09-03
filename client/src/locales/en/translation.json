@@ -10,8 +10,6 @@
   "com_a11y_summarize_failed": "Summarization failed, continuing with available context.",
   "com_a11y_summarize_started": "Summarizing context.",
   "com_admin_access_add_member": "Add member",
-  "com_admin_access_create_role": "Create role",
-  "com_admin_access_create_title": "Create role",
   "com_admin_access_delete_confirm": "Delete “{{0}}”? Members move to USER.",
   "com_admin_access_edit_title": "Edit role",
   "com_admin_access_empty": "No roles found.",
