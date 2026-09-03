@@ -1583,6 +1583,19 @@ describe('Conversation Operations', () => {
       const result = await getConvo('user123', 'non-existent-id');
       expect(result).toBeNull();
     });
+
+    it('should return null when the conversation belongs to another user', async () => {
+      await Conversation.create({
+        conversationId: mockConversationData.conversationId,
+        user: 'owner-user',
+        title: 'Owned by someone else',
+        endpoint: EModelEndpoint.openAI,
+      });
+
+      const result = await getConvo('other-user', mockConversationData.conversationId);
+
+      expect(result).toBeNull();
+    });
   });
 
   describe('getConvoOwnership', () => {
