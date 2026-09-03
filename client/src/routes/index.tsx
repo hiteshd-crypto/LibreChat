@@ -56,6 +56,16 @@ const loadProjectWorkspace = () =>
     Component: m.ProjectWorkspace,
   }));
 
+const loadAdminLayout = () =>
+  import('~/components/Admin').then((m) => ({ Component: m.AdminLayout }));
+const loadAdminAccess = () =>
+  import('~/components/Admin').then((m) => ({ Component: m.AccessView }));
+const loadAdminUsers = () => import('~/components/Admin').then((m) => ({ Component: m.UsersView }));
+const loadAdminUserConversations = () =>
+  import('~/components/Admin').then((m) => ({ Component: m.UserConversationsView }));
+const loadAdminTranscript = () =>
+  import('~/components/Admin').then((m) => ({ Component: m.ConversationTranscript }));
+
 const baseEl = document.querySelector('base');
 const baseHref = baseEl?.getAttribute('href') || '/';
 
@@ -195,6 +205,20 @@ export const router = createBrowserRouter(
                   <AgentMarketplace />
                 </MarketplaceProvider>
               ),
+            },
+            {
+              path: 'admin',
+              lazy: loadAdminLayout,
+              children: [
+                {
+                  index: true,
+                  element: <Navigate to="/admin/access" replace={true} />,
+                },
+                { path: 'access', lazy: loadAdminAccess },
+                { path: 'users', lazy: loadAdminUsers },
+                { path: 'users/:userId', lazy: loadAdminUserConversations },
+                { path: 'users/:userId/c/:conversationId', lazy: loadAdminTranscript },
+              ],
             },
           ],
         },
