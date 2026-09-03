@@ -29,6 +29,7 @@
   "com_admin_access_tab_members": "Members",
   "com_admin_access_user_role_note": "Every user has this role by default — its membership isn't editable. Manage admins from the ADMIN role.",
   "com_admin_access_title": "Access",
+  "com_admin_back_to_chat": "Back to chat",
   "com_admin_nav_title": "Admin",
   "com_admin_users_col_created": "Created",
   "com_admin_users_col_email": "Email",
