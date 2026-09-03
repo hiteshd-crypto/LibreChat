@@ -68,23 +68,28 @@ export default function UsersView() {
     body = <p className="text-sm text-text-secondary">{localize('com_admin_users_empty')}</p>;
   } else {
     body = (
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b border-border-light text-left text-xs text-text-secondary">
-              <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_name')}</th>
-              <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_email')}</th>
-              <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_role')}</th>
-              <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_provider')}</th>
-              <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_created')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((user) => (
-              <UserRow key={user.id} user={user} locale={locale} onOpen={() => open(user)} />
-            ))}
-          </tbody>
-        </table>
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-text-secondary">{localize('com_admin_users_list_hint')}</p>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-border-light text-left text-xs text-text-secondary">
+                <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_name')}</th>
+                <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_email')}</th>
+                <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_role')}</th>
+                <th className="px-3 py-2 font-medium">
+                  {localize('com_admin_users_col_provider')}
+                </th>
+                <th className="px-3 py-2 font-medium">{localize('com_admin_users_col_created')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((user) => (
+                <UserRow key={user.id} user={user} locale={locale} onOpen={() => open(user)} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
