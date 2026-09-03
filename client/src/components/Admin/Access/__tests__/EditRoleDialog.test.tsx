@@ -63,4 +63,15 @@ describe('EditRoleDialog', () => {
     render(<EditRoleDialog role={{ name: 'ADMIN' }} onClose={jest.fn()} />);
     expect(getInput('com_admin_access_role_name')).toBeDisabled();
   });
+
+  it('shows the Members tab for ADMIN', () => {
+    render(<EditRoleDialog role={{ name: 'ADMIN' }} onClose={jest.fn()} />);
+    expect(screen.getByText('com_admin_access_tab_members')).toBeInTheDocument();
+  });
+
+  it('hides the Members tab for the USER role and explains why', () => {
+    render(<EditRoleDialog role={{ name: 'USER' }} onClose={jest.fn()} />);
+    expect(screen.queryByText('com_admin_access_tab_members')).not.toBeInTheDocument();
+    expect(screen.getByText('com_admin_access_user_role_note')).toBeInTheDocument();
+  });
 });

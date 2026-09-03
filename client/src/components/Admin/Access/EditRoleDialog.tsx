@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SystemRoles } from 'librechat-data-provider';
 import {
   OGDialog,
   OGDialogTemplate,
@@ -45,6 +46,8 @@ export default function EditRoleDialog({
   }
 
   const isSystem = SYSTEM_ROLES.has(role.name);
+  /** USER is the implicit baseline — the backend rejects membership ops on it. */
+  const canManageMembers = role.name !== SystemRoles.USER;
   const mutationError = updateMutation.error ?? deleteMutation.error;
   const error = mutationError ? getResponseErrorMessage(mutationError) : undefined;
 
@@ -75,10 +78,19 @@ export default function EditRoleDialog({
           <Tabs defaultValue="details">
             <TabsList>
               <TabsTrigger value="details">{localize('com_admin_access_tab_details')}</TabsTrigger>
-              <TabsTrigger value="members">{localize('com_admin_access_tab_members')}</TabsTrigger>
+              {canManageMembers ? (
+                <TabsTrigger value="members">
+                  {localize('com_admin_access_tab_members')}
+                </TabsTrigger>
+              ) : null}
             </TabsList>
 
             <TabsContent value="details" className="flex flex-col gap-3 p-0 pt-3">
+              {!canManageMembers ? (
+                <p className="text-xs text-text-secondary">
+                  {localize('com_admin_access_user_role_note')}
+                </p>
+              ) : null}
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
                 {localize('com_admin_access_role_name')}
                 <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isSystem} />
@@ -121,9 +133,11 @@ export default function EditRoleDialog({
               </div>
             </TabsContent>
 
-            <TabsContent value="members" className="p-0 pt-3">
-              <RoleMembersPanel roleName={role.name} />
-            </TabsContent>
+            {canManageMembers ? (
+              <TabsContent value="members" className="p-0 pt-3">
+                <RoleMembersPanel roleName={role.name} />
+              </TabsContent>
+            ) : null}
           </Tabs>
         }
       />
