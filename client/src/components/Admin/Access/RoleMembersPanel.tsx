@@ -9,6 +9,7 @@ import {
   useRemoveRoleMember,
   MEMBERS_PAGE_SIZE,
 } from '~/data-provider';
+import { getResponseErrorMessage } from '~/utils';
 import { useLocalize } from '~/hooks';
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -32,7 +33,8 @@ export default function RoleMembersPanel({ roleName }: { roleName: string }) {
   const members = membersQuery.data?.members ?? [];
   const total = membersQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / MEMBERS_PAGE_SIZE));
-  const error = addMutation.error?.message ?? removeMutation.error?.message;
+  const mutationError = addMutation.error ?? removeMutation.error;
+  const error = mutationError ? getResponseErrorMessage(mutationError) : undefined;
 
   let memberList: ReactNode;
   if (membersQuery.isLoading) {

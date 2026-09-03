@@ -12,6 +12,7 @@ import {
 } from '@librechat/client';
 import type { TAdminRole } from 'librechat-data-provider';
 import { useUpdateRole, useDeleteRole } from '~/data-provider';
+import { getResponseErrorMessage } from '~/utils';
 import RoleMembersPanel from './RoleMembersPanel';
 import { SYSTEM_ROLES } from './constants';
 import { useLocalize } from '~/hooks';
@@ -44,7 +45,8 @@ export default function EditRoleDialog({
   }
 
   const isSystem = SYSTEM_ROLES.has(role.name);
-  const error = updateMutation.error?.message ?? deleteMutation.error?.message;
+  const mutationError = updateMutation.error ?? deleteMutation.error;
+  const error = mutationError ? getResponseErrorMessage(mutationError) : undefined;
 
   const saveDetails = () => {
     const trimmedName = name.trim();

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { OGDialog, OGDialogTemplate, Button, Input, Spinner } from '@librechat/client';
+import { getResponseErrorMessage } from '~/utils';
 import { useCreateRole } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 
@@ -61,7 +62,9 @@ export default function CreateRoleDialog({
               <Input value={description} onChange={(e) => setDescription(e.target.value)} />
             </label>
             {mutation.error ? (
-              <p className="text-sm text-text-secondary">{mutation.error.message}</p>
+              <p className="text-sm text-text-secondary">
+                {getResponseErrorMessage(mutation.error)}
+              </p>
             ) : null}
           </div>
         }
