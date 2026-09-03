@@ -16,6 +16,8 @@
   "com_admin_access_edit_title": "Edit role",
   "com_admin_access_empty": "No roles found.",
   "com_admin_access_load_error": "Failed to load roles.",
+  "com_admin_access_member_added": "Added {{0}}",
+  "com_admin_access_member_removed": "Removed {{0}}",
   "com_admin_access_members_empty": "No members.",
   "com_admin_access_page_next": "Next",
   "com_admin_access_page_prev": "Previous",

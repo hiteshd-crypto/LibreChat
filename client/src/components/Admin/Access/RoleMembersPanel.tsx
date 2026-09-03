@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { Button, Input, Spinner } from '@librechat/client';
+import { Button, Input, Spinner, useToastContext } from '@librechat/client';
 import type { ReactNode } from 'react';
 import {
   useAdminRoleMembers,
@@ -10,12 +10,14 @@ import {
   MEMBERS_PAGE_SIZE,
 } from '~/data-provider';
 import { getResponseErrorMessage } from '~/utils';
+import { NotificationSeverity } from '~/common';
 import { useLocalize } from '~/hooks';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function RoleMembersPanel({ roleName }: { roleName: string }) {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -29,6 +31,37 @@ export default function RoleMembersPanel({ roleName }: { roleName: string }) {
   const searchQuery = useAdminUserSearch(search);
   const addMutation = useAddRoleMember();
   const removeMutation = useRemoveRoleMember();
+
+  const addMember = (userId: string, name: string) =>
+    addMutation.mutate(
+      { roleName, userId },
+      {
+        onSuccess: () =>
+          showToast({ message: localize('com_admin_access_member_added', { 0: name }) }),
+        onError: (err) =>
+          showToast({
+            message: getResponseErrorMessage(err, localize('com_admin_access_add_member')),
+            severity: NotificationSeverity.ERROR,
+          }),
+      },
+    );
+
+  const removeMember = (userId: string, name: string) =>
+    removeMutation.mutate(
+      { roleName, userId },
+      {
+        onSuccess: () =>
+          showToast({ message: localize('com_admin_access_member_removed', { 0: name }) }),
+        onError: (err) =>
+          showToast({
+            message: getResponseErrorMessage(
+              err,
+              localize('com_admin_access_remove_member', { 0: name }),
+            ),
+            severity: NotificationSeverity.ERROR,
+          }),
+      },
+    );
 
   const members = membersQuery.data?.members ?? [];
   const total = membersQuery.data?.total ?? 0;
@@ -62,7 +95,7 @@ export default function RoleMembersPanel({ roleName }: { roleName: string }) {
               type="button"
               aria-label={localize('com_admin_access_remove_member', { 0: member.name })}
               className="text-text-secondary hover:text-text-primary"
-              onClick={() => removeMutation.mutate({ roleName, userId: member.userId })}
+              onClick={() => removeMember(member.userId, member.name)}
             >
               <X className="size-4" aria-hidden="true" />
             </button>
@@ -89,7 +122,7 @@ export default function RoleMembersPanel({ roleName }: { roleName: string }) {
                   type="button"
                   className="w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-surface-hover"
                   onClick={() => {
-                    addMutation.mutate({ roleName, userId: user.id });
+                    addMember(user.id, user.name);
                     setSearchInput('');
                     setSearch('');
                   }}

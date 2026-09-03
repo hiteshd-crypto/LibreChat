@@ -24,6 +24,7 @@ jest.mock('@librechat/client', () => ({
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   Input: (props: any) => <input {...props} />,
   Spinner: () => <span data-testid="spinner" />,
+  useToastContext: () => ({ showToast: jest.fn() }),
 }));
 
 beforeEach(() => {
@@ -41,7 +42,10 @@ describe('RoleMembersPanel', () => {
     render(<RoleMembersPanel roleName="ADMIN" />);
     expect(screen.getByText('Ann')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /com_admin_access_remove_member/ }));
-    expect(mockRemove).toHaveBeenCalledWith({ roleName: 'ADMIN', userId: 'u1' });
+    expect(mockRemove).toHaveBeenCalledWith(
+      { roleName: 'ADMIN', userId: 'u1' },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
   });
 
   it("surfaces the server's message, not the generic axios one", () => {

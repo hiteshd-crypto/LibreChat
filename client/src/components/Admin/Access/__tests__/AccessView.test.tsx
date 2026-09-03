@@ -34,6 +34,7 @@ jest.mock('@librechat/client', () => ({
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   Input: (props: any) => <input {...props} />,
   Spinner: () => <span data-testid="spinner" />,
+  useToastContext: () => ({ showToast: jest.fn() }),
   Tabs: ({ children }: any) => <div>{children}</div>,
   TabsList: ({ children }: any) => <div>{children}</div>,
   TabsTrigger: ({ children }: any) => <button>{children}</button>,

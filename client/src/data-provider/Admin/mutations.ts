@@ -42,6 +42,9 @@ export const useAddRoleMember = (): UseMutationResult<
     onSuccess: (_data, { roleName }) => {
       queryClient.invalidateQueries([QueryKeys.adminRoleMembers, roleName]);
       queryClient.invalidateQueries([QueryKeys.adminUsers]);
+      // Refetch the current user — if they just changed their own role, the
+      // admin route guard re-evaluates and redirects out.
+      queryClient.invalidateQueries([QueryKeys.user]);
     },
   });
 };
@@ -58,6 +61,7 @@ export const useRemoveRoleMember = (): UseMutationResult<
       onSuccess: (_data, { roleName }) => {
         queryClient.invalidateQueries([QueryKeys.adminRoleMembers, roleName]);
         queryClient.invalidateQueries([QueryKeys.adminUsers]);
+        queryClient.invalidateQueries([QueryKeys.user]);
       },
     },
   );
