@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
-import { BarChart3, MessagesSquare } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { BarChart3, MessagesSquare, ShieldCheck } from 'lucide-react';
 import { useUserKeyQuery } from 'librechat-data-provider/react-query';
 import { getConfigDefaults, getEndpointField, SystemRoles } from 'librechat-data-provider';
 import type { TEndpointsConfig } from 'librechat-data-provider';
@@ -68,8 +68,22 @@ export default function useUnifiedSidebarLinks() {
       Component: ConversationsSection,
     };
 
+    const isAdmin = user?.role === SystemRoles.ADMIN;
+    const adminLink: NavLink = {
+      title: 'com_admin_nav_title',
+      label: '',
+      icon: ShieldCheck,
+      id: 'admin',
+      onClick: () => {
+        if (!location.pathname.startsWith('/admin')) {
+          navigate('/admin/access');
+        }
+      },
+    };
+    const withAdmin = (middle: NavLink[]) => (isAdmin ? [...middle, adminLink] : middle);
+
     if (!insightsFeatureEnabled || insightsAccess?.access !== true) {
-      return [conversationLink, ...sideNavLinks];
+      return [conversationLink, ...withAdmin([...sideNavLinks])];
     }
 
     const insightsLink: NavLink = {
@@ -87,8 +101,15 @@ export default function useUnifiedSidebarLinks() {
     const nextLinks = [...sideNavLinks];
     nextLinks.splice(mcpIndex >= 0 ? mcpIndex + 1 : nextLinks.length, 0, insightsLink);
 
-    return [conversationLink, ...nextLinks];
-  }, [insightsAccess?.access, insightsFeatureEnabled, location.pathname, navigate, sideNavLinks]);
+    return [conversationLink, ...withAdmin(nextLinks)];
+  }, [
+    insightsAccess?.access,
+    insightsFeatureEnabled,
+    location.pathname,
+    navigate,
+    sideNavLinks,
+    user?.role,
+  ]);
 
   return links;
 }

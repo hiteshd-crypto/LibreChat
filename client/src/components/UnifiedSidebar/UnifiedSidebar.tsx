@@ -59,7 +59,16 @@ function UnifiedSidebar() {
 
   const links = useUnifiedSidebarLinks();
   const isInsightsRoute = location.pathname.startsWith('/insights');
-  const panelExpanded = expanded && !isInsightsRoute;
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  /** Full-page routes render their own layout, so the conversation panel collapses. */
+  const isFullPageRoute = isInsightsRoute || isAdminRoute;
+  const panelExpanded = expanded && !isFullPageRoute;
+  let routeActiveId: string | undefined;
+  if (isAdminRoute) {
+    routeActiveId = 'admin';
+  } else if (isInsightsRoute) {
+    routeActiveId = 'insights';
+  }
 
   /** The aside's max width is a viewport percentage, so the announced range has to track
    *  the viewport rather than a render-time snapshot of it. */
@@ -211,7 +220,7 @@ function UnifiedSidebar() {
               expanded={expanded}
               onClose={handleCollapse}
               onLeaveInsights={handleLeaveInsights}
-              routeActiveId={isInsightsRoute ? 'insights' : undefined}
+              routeActiveId={routeActiveId}
             />
             <nav
               id="chat-history-nav"
@@ -222,7 +231,7 @@ function UnifiedSidebar() {
             <MobileShortcutTargets
               links={links}
               onLeaveInsights={handleLeaveInsights}
-              routeActiveId={isInsightsRoute ? 'insights' : undefined}
+              routeActiveId={routeActiveId}
             />
             <MobileBottomBar links={links} onNewChat={handleCollapse} />
           </ActivePanelProvider>
