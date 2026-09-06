@@ -63,6 +63,10 @@ export type RequireCapabilityFn = (
   capability: SystemCapability,
 ) => (req: ServerRequest, res: Response, next: NextFunction) => Promise<void>;
 
+export type RequireAnyCapabilityFn = (
+  capabilities: SystemCapability[],
+) => (req: ServerRequest, res: Response, next: NextFunction) => Promise<void>;
+
 export type HasConfigCapabilityFn = (
   user: CapabilityUser,
   section: ConfigSection | null,
@@ -145,6 +149,7 @@ export type GetReadableConfigSectionsFn = (
 export function generateCapabilityCheck(deps: CapabilityDeps): {
   hasCapability: HasCapabilityFn;
   requireCapability: RequireCapabilityFn;
+  requireAnyCapability: RequireAnyCapabilityFn;
   hasConfigCapability: HasConfigCapabilityFn;
   getHeldCapabilities: GetHeldCapabilitiesFn;
   hasAnyConfigReadAccess: (user: CapabilityUser) => Promise<boolean>;
@@ -303,9 +308,58 @@ export function generateCapabilityCheck(deps: CapabilityDeps): {
     };
   }
 
+  /**
+   * Router-level gate that passes when the caller holds **any** of the listed
+   * capabilities. Used to widen a blanket single-capability router gate (e.g.
+   * the admin users router) without loosening the per-route checks that follow.
+   */
+  function requireAnyCapability(capabilities: SystemCapability[]) {
+    return async (req: ServerRequest, res: Response, next: NextFunction) => {
+      try {
+        if (!req.user) {
+          res.status(401).json({ message: 'Authentication required' });
+          return;
+        }
+
+        const id = req.user.id ?? req.user._id?.toString();
+        if (!id) {
+          res.status(401).json({ message: 'Authentication required' });
+          return;
+        }
+
+        const user: CapabilityUser = {
+          id,
+          role: req.user.role ?? '',
+          tenantId: (req.user as CapabilityUser).tenantId,
+          idOnTheSource: req.user.idOnTheSource ?? null,
+        };
+
+        for (const capability of capabilities) {
+          if (await hasCapability(user, capability)) {
+            next();
+            return;
+          }
+        }
+
+        warnDeniedCapabilityOnce(
+          `missing-any-capability:${id}:${capabilities.join(',')}`,
+          `[requireAnyCapability] Forbidden: user ${id} missing all of [${capabilities.join(', ')}]`,
+        );
+        res.status(403).json({ message: 'Forbidden' });
+      } catch (err) {
+        logger.error(
+          `[requireAnyCapability] Error checking capabilities: ${capabilities.join(', ')}`,
+          err,
+        );
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    };
+  }
+
   return {
     hasCapability,
     requireCapability,
+    requireAnyCapability,
     hasConfigCapability,
     getHeldCapabilities,
     hasAnyConfigReadAccess,

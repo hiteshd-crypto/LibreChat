@@ -33,12 +33,17 @@ describe('generateCapabilityCheck', () => {
   const mockHasCapabilityForPrincipals = jest.fn();
   const mockGetHeldCapabilities = jest.fn();
 
-  const { hasCapability, requireCapability, hasConfigCapability, getHeldCapabilities } =
-    generateCapabilityCheck({
-      getUserPrincipals: mockGetUserPrincipals,
-      hasCapabilityForPrincipals: mockHasCapabilityForPrincipals,
-      getHeldCapabilities: mockGetHeldCapabilities,
-    });
+  const {
+    hasCapability,
+    requireCapability,
+    requireAnyCapability,
+    hasConfigCapability,
+    getHeldCapabilities,
+  } = generateCapabilityCheck({
+    getUserPrincipals: mockGetUserPrincipals,
+    hasCapabilityForPrincipals: mockHasCapabilityForPrincipals,
+    getHeldCapabilities: mockGetHeldCapabilities,
+  });
 
   beforeEach(() => {
     mockGetUserPrincipals.mockReset();
@@ -182,6 +187,73 @@ describe('generateCapabilityCheck', () => {
       expect(mockNext).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(500);
       expect(jsonMock).toHaveBeenCalledWith({ message: 'Internal Server Error' });
+    });
+  });
+
+  describe('requireAnyCapability', () => {
+    let mockReq: Partial<ServerRequest>;
+    let mockRes: Partial<Response>;
+    let mockNext: jest.Mock;
+    let jsonMock: jest.Mock;
+    let statusMock: jest.Mock;
+
+    beforeEach(() => {
+      jsonMock = jest.fn();
+      statusMock = jest.fn().mockReturnValue({ json: jsonMock });
+      mockReq = { user: { id: 'user-456', role: 'USER' } as ServerRequest['user'] };
+      mockRes = { status: statusMock };
+      mockNext = jest.fn();
+    });
+
+    it('calls next() when the user holds any one of the listed capabilities', async () => {
+      mockGetUserPrincipals.mockResolvedValue(userPrincipals);
+      mockHasCapabilityForPrincipals.mockImplementation(({ capability }) =>
+        Promise.resolve(capability === SystemCapabilities.VIEW_SUBORDINATES),
+      );
+
+      const middleware = requireAnyCapability([
+        SystemCapabilities.ACCESS_ADMIN,
+        SystemCapabilities.READ_USERS,
+        SystemCapabilities.VIEW_SUBORDINATES,
+      ]);
+      await middleware(mockReq as ServerRequest, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledTimes(1);
+      expect(statusMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 when the user holds none of the listed capabilities', async () => {
+      mockGetUserPrincipals.mockResolvedValue(userPrincipals);
+      mockHasCapabilityForPrincipals.mockResolvedValue(false);
+
+      const middleware = requireAnyCapability([
+        SystemCapabilities.ACCESS_ADMIN,
+        SystemCapabilities.VIEW_SUBORDINATES,
+      ]);
+      await middleware(mockReq as ServerRequest, mockRes as Response, mockNext);
+
+      expect(mockNext).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(jsonMock).toHaveBeenCalledWith({ message: 'Forbidden' });
+    });
+
+    it('returns 401 when no user is present', async () => {
+      mockReq.user = undefined;
+
+      const middleware = requireAnyCapability([SystemCapabilities.ACCESS_ADMIN]);
+      await middleware(mockReq as ServerRequest, mockRes as Response, mockNext);
+
+      expect(mockNext).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(401);
+    });
+
+    it('returns 500 on an unexpected error', async () => {
+      mockGetUserPrincipals.mockRejectedValue(new Error('DB down'));
+
+      const middleware = requireAnyCapability([SystemCapabilities.ACCESS_ADMIN]);
+      await middleware(mockReq as ServerRequest, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(500);
     });
   });
 

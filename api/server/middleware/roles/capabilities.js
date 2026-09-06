@@ -9,6 +9,7 @@ const {
 const {
   hasCapability,
   requireCapability,
+  requireAnyCapability,
   hasConfigCapability,
   getHeldCapabilities,
   hasAnyConfigReadAccess: checkAnyConfigReadAccess,
@@ -23,6 +24,7 @@ const {
 module.exports = {
   hasCapability,
   requireCapability,
+  requireAnyCapability,
   hasConfigCapability,
   getHeldCapabilities,
   capabilityContextMiddleware,
