@@ -21,6 +21,14 @@ export const SystemCapabilities = {
   MANAGE_GROUPS: 'manage:groups',
   READ_ROLES: 'read:roles',
   MANAGE_ROLES: 'manage:roles',
+  /**
+   * Lets a non-ADMIN role view and manage users, conversations, and role
+   * assignments for any user whose role is a strict descendant of its own in
+   * the role hierarchy tree. Independent of ACCESS_ADMIN and READ_USERS —
+   * never implies, and is never implied by, either; the descendant check is
+   * the real per-target gate.
+   */
+  VIEW_SUBORDINATES: 'read:subordinates',
   READ_CONFIGS: 'read:configs',
   MANAGE_CONFIGS: 'manage:configs',
   ASSIGN_CONFIGS: 'assign:configs',
@@ -231,7 +239,11 @@ export const CAPABILITY_CATEGORIES: CapabilityCategory[] = [
   {
     key: 'roles',
     labelKey: 'com_cap_cat_roles',
-    capabilities: [SystemCapabilities.MANAGE_ROLES, SystemCapabilities.READ_ROLES],
+    capabilities: [
+      SystemCapabilities.MANAGE_ROLES,
+      SystemCapabilities.READ_ROLES,
+      SystemCapabilities.VIEW_SUBORDINATES,
+    ],
   },
   {
     key: 'config',
