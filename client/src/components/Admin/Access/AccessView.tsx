@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Input, Spinner } from '@librechat/client';
+import { Input, Spinner, Button } from '@librechat/client';
 import type { TAdminRole } from 'librechat-data-provider';
+import CreateRoleDialog from './CreateRoleDialog';
 import { useAdminRoles } from '~/data-provider';
 import EditRoleDialog from './EditRoleDialog';
 import { SYSTEM_ROLES } from './constants';
@@ -12,6 +13,7 @@ export default function AccessView() {
   const { data, isLoading, isError } = useAdminRoles();
   const [search, setSearch] = useState('');
   const [editTarget, setEditTarget] = useState<TAdminRole | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const roles = useMemo(() => {
     const list = data?.roles ?? [];
@@ -33,26 +35,33 @@ export default function AccessView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={localize('com_admin_access_search_placeholder')}
-        className="max-w-xs"
-      />
+      <div className="flex items-center justify-between gap-3">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={localize('com_admin_access_search_placeholder')}
+          className="max-w-xs"
+        />
+        <Button variant="submit" type="button" onClick={() => setCreateOpen(true)}>
+          {localize('com_admin_access_create_title')}
+        </Button>
+      </div>
 
       {roles.length === 0 ? (
         <p className="text-sm text-text-secondary">{localize('com_admin_access_empty')}</p>
       ) : (
         roles.map((role) => (
-          <RoleRow
-            key={role.name}
-            role={role}
-            isSystem={SYSTEM_ROLES.has(role.name)}
-            onEdit={() => setEditTarget(role)}
-          />
+          <div key={role.name} style={{ marginLeft: `${(role.depth ?? 0) * 1.25}rem` }}>
+            <RoleRow
+              role={role}
+              isSystem={SYSTEM_ROLES.has(role.name)}
+              onEdit={() => setEditTarget(role)}
+            />
+          </div>
         ))
       )}
 
+      <CreateRoleDialog open={createOpen} onOpenChange={setCreateOpen} />
       <EditRoleDialog role={editTarget} onClose={() => setEditTarget(null)} />
     </div>
   );

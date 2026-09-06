@@ -6,9 +6,13 @@ const mockUpdate = jest.fn();
 
 const idle = (mutate: jest.Mock) => ({ mutate, reset: jest.fn(), isLoading: false, error: null });
 
+const mockSetParent = jest.fn();
+
 jest.mock('~/data-provider', () => ({
   useUpdateRole: () => idle(mockUpdate),
   useDeleteRole: () => idle(jest.fn()),
+  useSetRoleParent: () => idle(mockSetParent),
+  useAdminRoles: () => ({ data: { roles: [{ name: 'SUPERVISOR' }, { name: 'support' }] } }),
   useAdminRoleMembers: () => ({ data: { members: [], total: 0 }, isLoading: false }),
   useAdminUserSearch: () => ({ data: { users: [] } }),
   useAddRoleMember: () => idle(jest.fn()),
@@ -74,5 +78,20 @@ describe('EditRoleDialog', () => {
     render(<EditRoleDialog role={{ name: 'USER' }} onClose={jest.fn()} />);
     expect(screen.queryByText('com_admin_access_tab_members')).not.toBeInTheDocument();
     expect(screen.getByText('com_admin_access_user_role_note')).toBeInTheDocument();
+  });
+
+  it('re-parents a custom role via useSetRoleParent', async () => {
+    render(<EditRoleDialog role={{ name: 'support', parentRole: null }} onClose={jest.fn()} />);
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'SUPERVISOR');
+    await userEvent.click(screen.getByText('com_admin_role_save_parent'));
+    expect(mockSetParent).toHaveBeenCalledWith(
+      { name: 'support', parentRole: 'SUPERVISOR' },
+      expect.anything(),
+    );
+  });
+
+  it('hides the Reports-to control for a system role', () => {
+    render(<EditRoleDialog role={{ name: 'ADMIN' }} onClose={jest.fn()} />);
+    expect(screen.queryByText('com_admin_role_parent_label')).not.toBeInTheDocument();
   });
 });

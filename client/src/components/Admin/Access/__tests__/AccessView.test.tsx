@@ -17,6 +17,8 @@ jest.mock('~/data-provider', () => ({
   useAdminRoles: () => mockUseAdminRoles(),
   useUpdateRole: () => idleMutation(mockUpdateMutate),
   useDeleteRole: () => idleMutation(mockDeleteMutate),
+  useCreateRole: () => idleMutation(jest.fn()),
+  useSetRoleParent: () => idleMutation(jest.fn()),
   useAdminRoleMembers: () => ({ data: { members: [], total: 0 }, isLoading: false }),
   useAdminUserSearch: () => ({ data: { users: [] } }),
   useAddRoleMember: () => idleMutation(jest.fn()),
@@ -74,14 +76,36 @@ describe('AccessView', () => {
     expect(screen.getByText('com_admin_access_load_error')).toBeInTheDocument();
   });
 
-  it('has no create-role affordance', () => {
+  it('renders a create-role button that opens the dialog', async () => {
     mockUseAdminRoles.mockReturnValue({
       data: { roles: [{ name: 'ADMIN' }], total: 1 },
       isLoading: false,
       isError: false,
     });
     render(<AccessView />);
-    expect(screen.queryByText(/create role/i)).not.toBeInTheDocument();
+    const openButtons = screen.getAllByText('com_admin_access_create_title');
+    // The trigger button; the dialog is closed so its title is not yet shown.
+    expect(openButtons).toHaveLength(1);
+    await userEvent.click(openButtons[0]);
+    // Dialog now open — the template renders the same key as its title.
+    expect(screen.getAllByText('com_admin_access_create_title').length).toBeGreaterThan(1);
+  });
+
+  it('indents child roles by depth', () => {
+    mockUseAdminRoles.mockReturnValue({
+      data: {
+        roles: [
+          { name: 'SUPERVISOR', depth: 0 },
+          { name: 'SALES_MANAGER', depth: 1, parentRole: 'SUPERVISOR' },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<AccessView />);
+    const child = screen.getByText('SALES_MANAGER').closest('div[style]') as HTMLElement;
+    expect(child).toHaveStyle({ marginLeft: '1.25rem' });
   });
 
   it('filters roles by the search box', async () => {

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Input, Spinner } from '@librechat/client';
 import type { ReactNode } from 'react';
 import type { AdminUserRow } from './UserRow';
-import { useAdminUsers, useAdminUserSearch } from '~/data-provider';
+import { useAdminUsers, useAdminUserSearch, useMyHierarchy } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import UserRow from './UserRow';
 
@@ -28,6 +28,10 @@ export default function UsersView() {
   const isSearching = search.trim().length >= 2;
   const listQuery = useAdminUsers(page, { enabled: !isSearching });
   const searchQuery = useAdminUserSearch(search);
+  const { data: hierarchy } = useMyHierarchy();
+  /** Only a non-admin hierarchy viewer gets the inline role-change control;
+   *  admins manage membership through the Access → Members flow. */
+  const manageableRoleNames = hierarchy?.isAdmin ? undefined : hierarchy?.manageableRoleNames;
 
   const rows: AdminUserRow[] = useMemo(() => {
     if (isSearching) {
@@ -85,7 +89,13 @@ export default function UsersView() {
             </thead>
             <tbody>
               {rows.map((user) => (
-                <UserRow key={user.id} user={user} locale={locale} onOpen={() => open(user)} />
+                <UserRow
+                  key={user.id}
+                  user={user}
+                  locale={locale}
+                  onOpen={() => open(user)}
+                  manageableRoleNames={manageableRoleNames}
+                />
               ))}
             </tbody>
           </table>

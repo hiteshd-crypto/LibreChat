@@ -12,6 +12,8 @@ const mockUseAdminUserSearch = jest.fn();
 const mockUseAdminUserConversations = jest.fn();
 const mockUseAdminUserConversation = jest.fn();
 const mockUseAdminUserMessages = jest.fn();
+const mockUseMyHierarchy = jest.fn();
+const mockSetUserRoleMutate = jest.fn();
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -32,6 +34,8 @@ jest.mock('~/data-provider', () => ({
   useAdminUserConversations: (...args: unknown[]) => mockUseAdminUserConversations(...args),
   useAdminUserConversation: (...args: unknown[]) => mockUseAdminUserConversation(...args),
   useAdminUserMessages: (...args: unknown[]) => mockUseAdminUserMessages(...args),
+  useMyHierarchy: (...args: unknown[]) => mockUseMyHierarchy(...args),
+  useSetUserRole: () => ({ mutate: mockSetUserRoleMutate, isLoading: false }),
 }));
 
 jest.mock('~/hooks', () => ({
@@ -73,6 +77,7 @@ beforeEach(() => {
   mockUseAdminUserConversations.mockReturnValue({ data: { pages: [] }, isLoading: false });
   mockUseAdminUserConversation.mockReturnValue({ data: undefined });
   mockUseAdminUserMessages.mockReturnValue({ data: [], isLoading: false });
+  mockUseMyHierarchy.mockReturnValue({ data: { isAdmin: true, manageableRoleNames: [] } });
 });
 
 describe('UsersView', () => {
@@ -97,6 +102,43 @@ describe('UsersView', () => {
     render(<UsersView />);
     await userEvent.type(screen.getByPlaceholderText('com_admin_users_search_placeholder'), 'ze');
     expect(await screen.findByText('Zed')).toBeInTheDocument();
+  });
+
+  it('shows a plain role badge for an admin viewer', () => {
+    mockUseMyHierarchy.mockReturnValue({ data: { isAdmin: true, manageableRoleNames: [] } });
+    mockUseAdminUsers.mockReturnValue({
+      data: {
+        users: [{ id: 'u1', name: 'Ann', email: 'a@x.io', role: 'SALES_EMPLOYEE' }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<UsersView />);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByText('SALES_EMPLOYEE')).toBeInTheDocument();
+  });
+
+  it('renders a role-change select for a non-admin hierarchy viewer', async () => {
+    mockUseMyHierarchy.mockReturnValue({
+      data: {
+        isAdmin: false,
+        manageableRoleNames: ['SALES_EMPLOYEE', 'SALES_EMPLOYEE_TIER_2'],
+      },
+    });
+    mockUseAdminUsers.mockReturnValue({
+      data: {
+        users: [{ id: 'u1', name: 'Ann', email: 'a@x.io', role: 'SALES_EMPLOYEE' }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<UsersView />);
+    const select = screen.getByRole('combobox');
+    await userEvent.selectOptions(select, 'SALES_EMPLOYEE_TIER_2');
+    expect(mockSetUserRoleMutate).toHaveBeenCalledWith({
+      userId: 'u1',
+      role: 'SALES_EMPLOYEE_TIER_2',
+    });
   });
 });
 
