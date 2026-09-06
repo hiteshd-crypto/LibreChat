@@ -1,11 +1,17 @@
 import { PrincipalType, SystemRoles } from 'librechat-data-provider';
-import { logger, isValidObjectIdString, RoleConflictError } from '@librechat/data-schemas';
+import {
+  logger,
+  isValidObjectIdString,
+  RoleConflictError,
+  SystemCapabilities,
+} from '@librechat/data-schemas';
 import type {
   IRole,
   IUser,
   IConfig,
   AdminMember,
   ISystemGrant,
+  SystemCapability,
   RecordAuditEntryInput,
   RecordAuditEntryOptions,
 } from '@librechat/data-schemas';
@@ -101,6 +107,18 @@ export interface AdminRolesDeps {
     roleData?: IRole,
   ) => Promise<void>;
   deleteRoleByName: (name: string) => Promise<IRole | null>;
+  /** Re-parents a role in the hierarchy tree; throws RoleConflictError on a cycle. */
+  setRoleParent: (roleName: string, newParentName: string | null) => Promise<IRole>;
+  /** Direct-children count — a nonzero count blocks deletion. */
+  countChildRoles: (roleName: string) => Promise<number>;
+  /** Auto-grants VIEW_SUBORDINATES to a newly created custom role. */
+  grantCapability: (params: {
+    principalType: PrincipalType;
+    principalId: string | Types.ObjectId;
+    capability: SystemCapability;
+    tenantId?: string;
+    grantedBy?: string | Types.ObjectId;
+  }) => Promise<{ grant: ISystemGrant | null; created: boolean }>;
   findUser: (
     criteria: FilterQuery<IUser>,
     fields?: string | string[] | null,
@@ -160,6 +178,9 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
     updateRoleByName,
     updateAccessPermissions,
     deleteRoleByName,
+    setRoleParent,
+    countChildRoles,
+    grantCapability,
     findUser,
     updateUser,
     updateUsersByRole,
@@ -241,10 +262,11 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
 
   async function createRoleHandler(req: ServerRequest, res: Response) {
     try {
-      const { name, description, permissions } = req.body as {
+      const { name, description, permissions, parentRole } = req.body as {
         name?: string;
         description?: string;
         permissions?: IRole['permissions'];
+        parentRole?: string | null;
       };
       const nameError = validateRoleName(name, true);
       if (nameError) {
@@ -260,6 +282,15 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       ) {
         return res.status(400).json({ error: 'permissions must be an object' });
       }
+      if (parentRole != null) {
+        if (typeof parentRole !== 'string' || isSystemRoleName(parentRole)) {
+          return res.status(400).json({ error: 'parentRole cannot be a system role' });
+        }
+        const parent = await getRoleByName(parentRole);
+        if (!parent) {
+          return res.status(400).json({ error: `Parent role "${parentRole}" does not exist` });
+        }
+      }
       const roleData: Partial<IRole> = {
         name: (name as string).trim(),
         permissions: permissions ?? {},
@@ -267,7 +298,16 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       if (description !== undefined) {
         roleData.description = description;
       }
+      if (parentRole !== undefined) {
+        roleData.parentRole = parentRole;
+      }
       const role = await createRoleByName(roleData);
+      await grantCapability({
+        principalType: PrincipalType.ROLE,
+        principalId: role.name,
+        capability: SystemCapabilities.VIEW_SUBORDINATES,
+        tenantId: req.user?.tenantId,
+      });
       return res.status(201).json({ role });
     } catch (error) {
       logger.error('[adminRoles] createRole error:', error);
@@ -331,7 +371,11 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       if (paramError) {
         return res.status(400).json({ error: paramError });
       }
-      const body = req.body as { name?: string; description?: string };
+      const body = req.body as {
+        name?: string;
+        description?: string;
+        parentRole?: string | null;
+      };
       const nameError = validateRoleName(body.name, false);
       if (nameError) {
         return res.status(400).json({ error: nameError });
@@ -339,6 +383,29 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       const descError = validateDescription(body.description);
       if (descError) {
         return res.status(400).json({ error: descError });
+      }
+
+      /**
+       * Re-parenting is its own operation — the client sends `parentRole` alone,
+       * never alongside a rename/description change (the Access UI keeps them
+       * separate). Handle it here and return before the rename path.
+       */
+      if (body.parentRole !== undefined) {
+        if (isSystemRoleName(name)) {
+          return res.status(400).json({ error: 'Cannot re-parent a system role' });
+        }
+        try {
+          const role = await setRoleParent(name, body.parentRole);
+          return res.status(200).json({ role });
+        } catch (error) {
+          if (error instanceof RoleConflictError) {
+            return res.status(400).json({ error: error.message });
+          }
+          if (error instanceof Error && /does not exist|system role/.test(error.message)) {
+            return res.status(400).json({ error: error.message });
+          }
+          throw error;
+        }
       }
 
       const trimmedName = body.name?.trim() ?? '';
@@ -448,6 +515,13 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(403).json({ error: 'Cannot delete system role' });
       }
 
+      const childCount = await countChildRoles(name);
+      if (childCount > 0) {
+        return res.status(409).json({
+          error: `Cannot delete role "${name}": it has ${childCount} child role(s). Re-parent or delete them first.`,
+        });
+      }
+
       const deleted = await deleteRoleByName(name);
       if (!deleted) {
         return res.status(404).json({ error: 'Role not found' });
@@ -474,6 +548,9 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
 
       return res.status(200).json({ success: true });
     } catch (error) {
+      if (error instanceof RoleConflictError) {
+        return res.status(409).json({ error: error.message });
+      }
       logger.error('[adminRoles] deleteRole error:', error);
       return res.status(500).json({ error: 'Failed to delete role' });
     }

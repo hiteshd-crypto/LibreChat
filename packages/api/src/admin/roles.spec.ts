@@ -66,6 +66,9 @@ function createDeps(overrides: Partial<AdminRolesDeps> = {}): AdminRolesDeps {
     updateRoleByName: jest.fn().mockResolvedValue(mockRole()),
     updateAccessPermissions: jest.fn().mockResolvedValue(undefined),
     deleteRoleByName: jest.fn().mockResolvedValue(mockRole()),
+    setRoleParent: jest.fn().mockResolvedValue(mockRole()),
+    countChildRoles: jest.fn().mockResolvedValue(0),
+    grantCapability: jest.fn().mockResolvedValue({ grant: null, created: true }),
     findUser: jest.fn().mockResolvedValue(null),
     updateUser: jest.fn().mockResolvedValue(mockUser()),
     updateUsersByRole: jest.fn().mockResolvedValue(undefined),
@@ -417,6 +420,62 @@ describe('createAdminRolesHandlers', () => {
       expect(status).toHaveBeenCalledWith(400);
       expect(json).toHaveBeenCalledWith({ error: 'permissions must be an object' });
       expect(deps.createRoleByName).not.toHaveBeenCalled();
+    });
+
+    it('grants VIEW_SUBORDINATES to the new role', async () => {
+      const grantCapability = jest.fn().mockResolvedValue({ grant: null, created: true });
+      const deps = createDeps({
+        grantCapability,
+        createRoleByName: jest.fn().mockResolvedValue(mockRole({ name: 'SALES_MANAGER' })),
+      });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status } = createReqRes({ body: { name: 'SALES_MANAGER' } });
+
+      await handlers.createRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(201);
+      expect(grantCapability).toHaveBeenCalledWith(
+        expect.objectContaining({
+          principalId: 'SALES_MANAGER',
+          capability: 'read:subordinates',
+        }),
+      );
+    });
+
+    it('passes parentRole through and rejects an unknown parent with 400', async () => {
+      const createRoleByName = jest.fn().mockResolvedValue(mockRole({ name: 'CHILD' }));
+      const deps = createDeps({
+        createRoleByName,
+        getRoleByName: jest.fn().mockResolvedValue(null),
+      });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status } = createReqRes({
+        body: { name: 'CHILD', parentRole: 'GHOST' },
+      });
+
+      await handlers.createRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(400);
+      expect(createRoleByName).not.toHaveBeenCalled();
+    });
+
+    it('creates a child role when the parent exists', async () => {
+      const createRoleByName = jest.fn().mockResolvedValue(mockRole({ name: 'CHILD' }));
+      const deps = createDeps({
+        createRoleByName,
+        getRoleByName: jest.fn().mockResolvedValue(mockRole({ name: 'SUPERVISOR' })),
+      });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status } = createReqRes({
+        body: { name: 'CHILD', parentRole: 'SUPERVISOR' },
+      });
+
+      await handlers.createRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(201);
+      expect(createRoleByName).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'CHILD', parentRole: 'SUPERVISOR' }),
+      );
     });
   });
 
@@ -832,6 +891,52 @@ describe('createAdminRolesHandlers', () => {
       expect(json).toHaveBeenCalledWith({ error: 'description must be a string' });
       expect(deps.getRoleByName).not.toHaveBeenCalled();
     });
+
+    it('re-parents via setRoleParent when parentRole is in the body', async () => {
+      const setRoleParent = jest
+        .fn()
+        .mockResolvedValue(mockRole({ name: 'SALES_MANAGER', parentRole: 'SUPERVISOR', depth: 1 }));
+      const deps = createDeps({ setRoleParent });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status } = createReqRes({
+        params: { name: 'SALES_MANAGER' },
+        body: { parentRole: 'SUPERVISOR' },
+      });
+
+      await handlers.updateRole(req, res);
+
+      expect(setRoleParent).toHaveBeenCalledWith('SALES_MANAGER', 'SUPERVISOR');
+      expect(status).toHaveBeenCalledWith(200);
+    });
+
+    it('returns 400 when setRoleParent rejects a cycle', async () => {
+      const setRoleParent = jest.fn().mockRejectedValue(new RoleConflictError('cycle'));
+      const deps = createDeps({ setRoleParent });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status } = createReqRes({
+        params: { name: 'SALES_MANAGER' },
+        body: { parentRole: 'SALES_EMPLOYEE' },
+      });
+
+      await handlers.updateRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(400);
+    });
+
+    it('returns 400 when re-parenting a system role', async () => {
+      const setRoleParent = jest.fn();
+      const deps = createDeps({ setRoleParent });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status } = createReqRes({
+        params: { name: SystemRoles.USER },
+        body: { parentRole: 'SUPERVISOR' },
+      });
+
+      await handlers.updateRole(req, res);
+
+      expect(setRoleParent).not.toHaveBeenCalled();
+      expect(status).toHaveBeenCalledWith(400);
+    });
   });
 
   describe('updateRolePermissions', () => {
@@ -1117,6 +1222,24 @@ describe('createAdminRolesHandlers', () => {
 
       expect(status).toHaveBeenCalledWith(500);
       expect(json).toHaveBeenCalledWith({ error: 'Failed to delete role' });
+    });
+
+    it('returns 409 with the child count when the role has children', async () => {
+      const deleteRoleByName = jest.fn();
+      const deps = createDeps({
+        countChildRoles: jest.fn().mockResolvedValue(2),
+        deleteRoleByName,
+      });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status, json } = createReqRes({ params: { name: 'SUPERVISOR' } });
+
+      await handlers.deleteRole(req, res);
+
+      expect(deleteRoleByName).not.toHaveBeenCalled();
+      expect(status).toHaveBeenCalledWith(409);
+      expect(json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('2') }),
+      );
     });
   });
 
