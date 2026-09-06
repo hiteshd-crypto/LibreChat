@@ -1,22 +1,22 @@
 import { Navigate } from 'react-router-dom';
-import { SystemRoles } from 'librechat-data-provider';
-import { useAuthContext } from '~/hooks';
+import { useMyHierarchy } from '~/data-provider';
 
 /**
- * Client-side gate for the admin area. Returns a redirect element for
- * non-admins (render it early), or `null` for admins. This is defense in
- * depth only — the real enforcement is the capability middleware on
- * `/api/admin/*`.
+ * Client-side gate for the admin area. Returns a redirect element once the
+ * hierarchy query resolves and the caller is neither an admin nor a hierarchy
+ * role with visible subordinates; returns `null` while the query is loading or
+ * when the caller is admitted.
  *
- * Gates on the ADMIN role rather than the `ACCESS_ADMIN` capability the
- * backend checks. For the standard ADMIN/USER model these are equivalent;
- * a custom role granted `ACCESS_ADMIN` would pass the API but be redirected
- * here. Making this capability-aware needs a capability query — deliberately
- * out of scope for the role-only gating this feature ships with.
+ * This is defense in depth only — the real enforcement is
+ * `requireAnyCapability` / `requireSubordinateAccess` on `/api/admin/*`. The
+ * layout decides which tabs a non-admin hierarchy role actually sees.
  */
 export function useAdminGuard(): React.ReactElement | null {
-  const { user } = useAuthContext();
-  if (user?.role !== SystemRoles.ADMIN) {
+  const { data, isLoading } = useMyHierarchy();
+  if (isLoading) {
+    return null;
+  }
+  if (!data?.isAdmin && !data?.canViewSubordinates) {
     return <Navigate to="/c/new" replace />;
   }
   return null;

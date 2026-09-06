@@ -3,6 +3,7 @@ import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import type {
   TConversation,
   TMessage,
+  TMyHierarchy,
   TAdminRoleListResponse,
   TAdminMemberListResponse,
   TAdminUserListResponse,
@@ -24,6 +25,16 @@ export const useAdminRoles = (
   config?: UseQueryOptions<TAdminRoleListResponse>,
 ): QueryObserverResult<TAdminRoleListResponse> =>
   useQuery<TAdminRoleListResponse>([QueryKeys.adminRoles], () => dataService.listAdminRoles(), {
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    ...config,
+  });
+
+/** The caller's own hierarchy access — drives the admin guard, sidebar link, and role pickers. */
+export const useMyHierarchy = (
+  config?: UseQueryOptions<TMyHierarchy>,
+): QueryObserverResult<TMyHierarchy> =>
+  useQuery<TMyHierarchy>([QueryKeys.myHierarchy], () => dataService.getMyHierarchy(), {
     refetchOnWindowFocus: false,
     staleTime: 30_000,
     ...config,

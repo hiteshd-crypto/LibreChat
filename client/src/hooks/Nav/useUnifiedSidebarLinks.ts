@@ -6,7 +6,12 @@ import { useUserKeyQuery } from 'librechat-data-provider/react-query';
 import { getConfigDefaults, getEndpointField, SystemRoles } from 'librechat-data-provider';
 import type { TEndpointsConfig } from 'librechat-data-provider';
 import type { NavLink } from '~/common';
-import { useGetEndpointsQuery, useGetStartupConfig, useInsightsAccessQuery } from '~/data-provider';
+import {
+  useGetEndpointsQuery,
+  useGetStartupConfig,
+  useInsightsAccessQuery,
+  useMyHierarchy,
+} from '~/data-provider';
 import ConversationsSection from '~/components/UnifiedSidebar/ConversationsSection';
 import useSideNavLinks from '~/hooks/Nav/useSideNavLinks';
 import { useAuthContext } from '~/hooks';
@@ -32,6 +37,7 @@ export default function useUnifiedSidebarLinks() {
   const { data: insightsAccess } = useInsightsAccessQuery(user?.id, {
     enabled: user?.role === SystemRoles.ADMIN && insightsFeatureEnabled,
   });
+  const { data: hierarchy } = useMyHierarchy();
 
   const endpointType = useMemo(
     () => getEndpointField(endpointsConfig, endpoint, 'type'),
@@ -68,7 +74,10 @@ export default function useUnifiedSidebarLinks() {
       Component: ConversationsSection,
     };
 
-    const isAdmin = user?.role === SystemRoles.ADMIN;
+    /** Widened past the ADMIN role: a hierarchy role holding VIEW_SUBORDINATES
+     * gets the Users tab (Access stays admin-only, gated in AdminLayout). */
+    const canAccessAdmin = (hierarchy?.isAdmin || hierarchy?.canViewSubordinates) ?? false;
+    const adminLanding = hierarchy?.isAdmin ? '/admin/access' : '/admin/users';
     const adminLink: NavLink = {
       title: 'com_admin_nav_title',
       label: '',
@@ -76,11 +85,11 @@ export default function useUnifiedSidebarLinks() {
       id: 'admin',
       onClick: () => {
         if (!location.pathname.startsWith('/admin')) {
-          navigate('/admin/access');
+          navigate(adminLanding);
         }
       },
     };
-    const withAdmin = (middle: NavLink[]) => (isAdmin ? [...middle, adminLink] : middle);
+    const withAdmin = (middle: NavLink[]) => (canAccessAdmin ? [...middle, adminLink] : middle);
 
     if (!insightsFeatureEnabled || insightsAccess?.access !== true) {
       return [conversationLink, ...withAdmin([...sideNavLinks])];
@@ -103,12 +112,13 @@ export default function useUnifiedSidebarLinks() {
 
     return [conversationLink, ...withAdmin(nextLinks)];
   }, [
+    hierarchy?.isAdmin,
+    hierarchy?.canViewSubordinates,
     insightsAccess?.access,
     insightsFeatureEnabled,
     location.pathname,
     navigate,
     sideNavLinks,
-    user?.role,
   ]);
 
   return links;

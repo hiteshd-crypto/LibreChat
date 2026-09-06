@@ -3,7 +3,7 @@ import { dataService } from 'librechat-data-provider';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useAdminRoles, useAdminUserSearch } from '../queries';
+import { useAdminRoles, useAdminUserSearch, useMyHierarchy } from '../queries';
 
 jest.mock('librechat-data-provider', () => {
   const actual = jest.requireActual('librechat-data-provider');
@@ -13,6 +13,7 @@ jest.mock('librechat-data-provider', () => {
       ...actual.dataService,
       listAdminRoles: jest.fn(),
       searchAdminUsers: jest.fn(),
+      getMyHierarchy: jest.fn(),
     },
   };
 });
@@ -22,6 +23,9 @@ const listAdminRoles = dataService.listAdminRoles as jest.MockedFunction<
 >;
 const searchAdminUsers = dataService.searchAdminUsers as jest.MockedFunction<
   typeof dataService.searchAdminUsers
+>;
+const getMyHierarchy = dataService.getMyHierarchy as jest.MockedFunction<
+  typeof dataService.getMyHierarchy
 >;
 
 const createWrapper = () => {
@@ -43,6 +47,21 @@ describe('useAdminRoles', () => {
     const { result } = renderHook(() => useAdminRoles(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.roles[0].name).toBe('ADMIN');
+  });
+});
+
+describe('useMyHierarchy', () => {
+  it('fetches the caller hierarchy access', async () => {
+    getMyHierarchy.mockResolvedValue({
+      isAdmin: false,
+      canViewSubordinates: true,
+      viewableRoleNames: ['SALES_EMPLOYEE'],
+      manageableRoleNames: ['SALES_EMPLOYEE'],
+    });
+    const { result } = renderHook(() => useMyHierarchy(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.canViewSubordinates).toBe(true);
+    expect(result.current.data?.viewableRoleNames).toEqual(['SALES_EMPLOYEE']);
   });
 });
 

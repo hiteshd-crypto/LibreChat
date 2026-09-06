@@ -3,6 +3,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type { TAdminRole } from 'librechat-data-provider';
 
+export const useCreateRole = (): UseMutationResult<
+  { role: TAdminRole },
+  Error,
+  { name: string; description?: string; parentRole?: string | null }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation((body) => dataService.createAdminRole(body), {
+    onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminRoles]),
+  });
+};
+
 export const useUpdateRole = (): UseMutationResult<
   { role: TAdminRole },
   Error,
@@ -11,6 +22,35 @@ export const useUpdateRole = (): UseMutationResult<
   const queryClient = useQueryClient();
   return useMutation(({ name, updates }) => dataService.updateAdminRole(name, updates), {
     onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminRoles]),
+  });
+};
+
+export const useSetRoleParent = (): UseMutationResult<
+  { role: TAdminRole },
+  Error,
+  { name: string; parentRole: string | null }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(({ name, parentRole }) => dataService.setAdminRoleParent(name, parentRole), {
+    onSuccess: () => {
+      queryClient.invalidateQueries([QueryKeys.adminRoles]);
+      queryClient.invalidateQueries([QueryKeys.myHierarchy]);
+    },
+  });
+};
+
+export const useSetUserRole = (): UseMutationResult<
+  { success: true },
+  Error,
+  { userId: string; role: string }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(({ userId, role }) => dataService.setAdminUserRole(userId, role), {
+    onSuccess: () => {
+      queryClient.invalidateQueries([QueryKeys.adminUsers]);
+      queryClient.invalidateQueries([QueryKeys.adminUserSearch]);
+      queryClient.invalidateQueries([QueryKeys.user]);
+    },
   });
 };
 

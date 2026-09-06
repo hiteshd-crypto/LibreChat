@@ -3,6 +3,9 @@ import { SystemRoles } from 'librechat-data-provider';
 import useUnifiedSidebarLinks from '../useUnifiedSidebarLinks';
 
 const mockAuthState: { user?: { role?: string } } = { user: undefined };
+const mockHierarchy: { data?: { isAdmin: boolean; canViewSubordinates: boolean } } = {
+  data: undefined,
+};
 
 jest.mock('recoil', () => ({
   ...jest.requireActual('recoil'),
@@ -23,6 +26,7 @@ jest.mock('~/data-provider', () => ({
   useGetEndpointsQuery: () => ({ data: {} }),
   useGetStartupConfig: () => ({ data: { insightsEnabled: false } }),
   useInsightsAccessQuery: () => ({ data: { access: false } }),
+  useMyHierarchy: () => mockHierarchy,
 }));
 
 jest.mock('~/hooks/Nav/useSideNavLinks', () => ({
@@ -42,12 +46,21 @@ jest.mock('~/hooks', () => ({
 describe('useUnifiedSidebarLinks — admin entry', () => {
   it('adds an Admin link for ADMIN users', () => {
     mockAuthState.user = { role: SystemRoles.ADMIN };
+    mockHierarchy.data = { isAdmin: true, canViewSubordinates: true };
+    const { result } = renderHook(() => useUnifiedSidebarLinks());
+    expect(result.current.some((l) => l.id === 'admin')).toBe(true);
+  });
+
+  it('adds an Admin link for a hierarchy role with subordinates', () => {
+    mockAuthState.user = { role: 'SALES_MANAGER' };
+    mockHierarchy.data = { isAdmin: false, canViewSubordinates: true };
     const { result } = renderHook(() => useUnifiedSidebarLinks());
     expect(result.current.some((l) => l.id === 'admin')).toBe(true);
   });
 
   it('omits the Admin link for regular users', () => {
     mockAuthState.user = { role: SystemRoles.USER };
+    mockHierarchy.data = { isAdmin: false, canViewSubordinates: false };
     const { result } = renderHook(() => useUnifiedSidebarLinks());
     expect(result.current.some((l) => l.id === 'admin')).toBe(false);
   });

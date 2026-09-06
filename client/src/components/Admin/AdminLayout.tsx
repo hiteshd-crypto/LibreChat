@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useMyHierarchy } from '~/data-provider';
 import { useAdminGuard } from './guard';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
@@ -6,6 +7,7 @@ import { cn } from '~/utils';
 export default function AdminLayout() {
   const localize = useLocalize();
   const redirect = useAdminGuard();
+  const { data: hierarchy } = useMyHierarchy();
   if (redirect) {
     return redirect;
   }
@@ -34,7 +36,7 @@ export default function AdminLayout() {
           {localize('com_admin_nav_title')}
         </h1>
         <nav className="flex gap-1">
-          {tab('/admin/access', localize('com_admin_access_title'))}
+          {hierarchy?.isAdmin ? tab('/admin/access', localize('com_admin_access_title')) : null}
           {tab('/admin/users', localize('com_admin_users_title'))}
         </nav>
       </header>
