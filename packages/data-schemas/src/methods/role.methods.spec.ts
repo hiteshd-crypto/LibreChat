@@ -10,8 +10,8 @@ import {
 } from 'librechat-data-provider';
 import type { IRole, IUser, RolePermissions } from '..';
 import { _resetStrictCache } from '../models/plugins/tenantIsolation';
+import { createRoleMethods, RoleConflictError } from './role';
 import { tenantStorage } from '~/config/tenantContext';
-import { createRoleMethods } from './role';
 import { createModels } from '../models';
 
 jest.mock('~/config/winston', () => ({
@@ -868,6 +868,25 @@ describe('createRoleByName', () => {
     expect(stored?.parentRole ?? null).toBeNull();
     expect(stored?.depth).toBe(0);
   });
+
+  it('computes depth from the parent when parentRole is given', async () => {
+    await createRoleByName({ name: 'TREE_PARENT' });
+    const child = await createRoleByName({ name: 'TREE_CHILD', parentRole: 'TREE_PARENT' });
+    expect(child.parentRole).toBe('TREE_PARENT');
+    expect(child.depth).toBe(1);
+  });
+
+  it('rejects a nonexistent parent', async () => {
+    await expect(
+      createRoleByName({ name: 'ORPHAN', parentRole: 'DOES_NOT_EXIST' }),
+    ).rejects.toThrow(/does not exist/);
+  });
+
+  it('rejects a system role as the parent', async () => {
+    await expect(
+      createRoleByName({ name: 'BAD_CHILD', parentRole: SystemRoles.USER }),
+    ).rejects.toThrow(/system role/);
+  });
 });
 
 describe('deleteRoleByName', () => {
@@ -900,6 +919,17 @@ describe('deleteRoleByName', () => {
   it('throws for system roles', async () => {
     await expect(deleteRoleByName(SystemRoles.ADMIN)).rejects.toThrow(/Cannot delete system role/);
     await expect(deleteRoleByName(SystemRoles.USER)).rejects.toThrow(/Cannot delete system role/);
+  });
+
+  it('refuses to delete a role that has children', async () => {
+    await createRoleByName({ name: 'DELETE_PARENT' });
+    await createRoleByName({ name: 'DELETE_CHILD', parentRole: 'DELETE_PARENT' });
+    await expect(deleteRoleByName('DELETE_PARENT')).rejects.toThrow(RoleConflictError);
+  });
+
+  it('deletes a childless role as before', async () => {
+    await createRoleByName({ name: 'DELETE_LEAF' });
+    await expect(deleteRoleByName('DELETE_LEAF')).resolves.not.toBeNull();
   });
 
   it('sets cache entry to null after deletion', async () => {
@@ -977,6 +1007,29 @@ describe('updateRoleByName - cache on rename', () => {
       expect.objectContaining({ name: 'editor', description: 'Updated desc' }),
     );
     expect(mockCache.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('repoints every child reference on rename', async () => {
+    await createRoleByName({ name: 'RENAME_OLD' });
+    await createRoleByName({ name: 'RENAME_CHILD_A', parentRole: 'RENAME_OLD' });
+    await createRoleByName({ name: 'RENAME_CHILD_B', parentRole: 'RENAME_OLD' });
+
+    await updateRoleByName('RENAME_OLD', { name: 'RENAME_NEW' });
+
+    const a = await Role.findOne({ name: 'RENAME_CHILD_A' }).lean();
+    const b = await Role.findOne({ name: 'RENAME_CHILD_B' }).lean();
+    expect(a?.parentRole).toBe('RENAME_NEW');
+    expect(b?.parentRole).toBe('RENAME_NEW');
+  });
+
+  it('leaves children untouched on a description-only update', async () => {
+    await createRoleByName({ name: 'DESC_ONLY' });
+    await createRoleByName({ name: 'DESC_ONLY_CHILD', parentRole: 'DESC_ONLY' });
+
+    await updateRoleByName('DESC_ONLY', { description: 'changed' });
+
+    const child = await Role.findOne({ name: 'DESC_ONLY_CHILD' }).lean();
+    expect(child?.parentRole).toBe('DESC_ONLY');
   });
 });
 

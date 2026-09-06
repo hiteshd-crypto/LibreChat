@@ -266,6 +266,9 @@ export function createRoleMethods(
         .select('-__v')
         .lean()
         .exec();
+      if (updates.name && updates.name !== roleName) {
+        await repointChildRoles(roleName, updates.name);
+      }
       if (cache) {
         if (updates.name && updates.name !== roleName) {
           await Promise.all([
@@ -536,9 +539,30 @@ export function createRoleMethods(
     if (existing) {
       throw new RoleConflictError(`Role "${trimmed}" already exists`);
     }
+
+    const { parentRole } = roleData;
+    let depth = 0;
+    if (parentRole != null) {
+      if (isSystemRoleName(parentRole)) {
+        throw new Error(`Cannot set parent to system role: ${parentRole}`);
+      }
+      const parent = (await Role.findOne({ name: parentRole }, 'depth').lean()) as {
+        depth?: number;
+      } | null;
+      if (!parent) {
+        throw new Error(`Parent role "${parentRole}" does not exist`);
+      }
+      depth = (parent.depth ?? 0) + 1;
+    }
+
     let role;
     try {
-      role = await new Role({ ...roleData, name: trimmed }).save();
+      role = await new Role({
+        ...roleData,
+        name: trimmed,
+        parentRole: parentRole ?? null,
+        depth,
+      }).save();
     } catch (err) {
       /**
        * The compound unique index `{ name: 1, tenantId: 1 }` on the role schema
@@ -579,6 +603,12 @@ export function createRoleMethods(
   async function deleteRoleByName(roleName: string): Promise<IRole | null> {
     if (isSystemRoleName(roleName)) {
       throw new Error(`Cannot delete system role: ${roleName}`);
+    }
+    const childCount = await countChildRoles(roleName);
+    if (childCount > 0) {
+      throw new RoleConflictError(
+        `Cannot delete role "${roleName}": it has ${childCount} child role(s). Re-parent or delete them first.`,
+      );
     }
     const Role = mongoose.models.Role;
     const User = mongoose.models.User as Model<IUser>;
@@ -761,6 +791,26 @@ export function createRoleMethods(
   async function countChildRoles(roleName: string): Promise<number> {
     const Role = mongoose.models.Role;
     return await Role.countDocuments({ parentRole: roleName });
+  }
+
+  /**
+   * Repoints every child's `parentRole` reference when a role is renamed
+   * (children reference the parent by name). Private to this module — the only
+   * caller is `updateRoleByName`'s rename path.
+   */
+  async function repointChildRoles(oldParentName: string, newParentName: string): Promise<void> {
+    const Role = mongoose.models.Role as Model<IRole>;
+    const children = await Role.find({ parentRole: oldParentName }, 'name').lean<
+      { name: string }[]
+    >();
+    if (children.length === 0) {
+      return;
+    }
+    await Role.updateMany({ parentRole: oldParentName }, { $set: { parentRole: newParentName } });
+    const cache = deps.getCache?.(CacheKeys.ROLES);
+    if (cache) {
+      await Promise.all(children.map((child) => cache.set(scopedCacheKey(child.name), null)));
+    }
   }
 
   /**
