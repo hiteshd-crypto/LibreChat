@@ -3,10 +3,11 @@ const mongoose = require('mongoose');
 const {
   createAdminUsersHandlers,
   createAdminUserConversationsHandlers,
+  createHierarchyMiddleware,
   revokeUserCodeEnvironmentWorkers,
 } = require('@librechat/api');
 const { SystemCapabilities } = require('@librechat/data-schemas');
-const { requireCapability } = require('~/server/middleware/roles/capabilities');
+const { hasCapability, requireAnyCapability } = require('~/server/middleware/roles/capabilities');
 const { requireJwtAuth } = require('~/server/middleware');
 const {
   drainAgentTriggerDeliveriesForUser,
@@ -19,13 +20,31 @@ const { getAppConfig, invalidateCodeEnvironmentConfigCache } = require('~/server
 
 const router = express.Router();
 
-const requireAdminAccess = requireCapability(SystemCapabilities.ACCESS_ADMIN);
-const requireReadUsers = requireCapability(SystemCapabilities.READ_USERS);
+/**
+ * Router gate widened from ACCESS_ADMIN-only so a hierarchy role holding
+ * VIEW_SUBORDINATES can reach the per-route hierarchy middleware below. The
+ * Access (roles) router stays strictly ACCESS_ADMIN-gated.
+ */
+const requireAdminOrHierarchyAccess = requireAnyCapability([
+  SystemCapabilities.ACCESS_ADMIN,
+  SystemCapabilities.READ_USERS,
+  SystemCapabilities.VIEW_SUBORDINATES,
+]);
 // const requireManageUsers = requireCapability(SystemCapabilities.MANAGE_USERS);
+
+const { requireSubordinateAccess, attachHierarchyScope } = createHierarchyMiddleware({
+  hasCapability,
+  findUsers: db.findUsers,
+  canViewRole: db.canViewRole,
+  getDescendantRoleNames: db.getDescendantRoleNames,
+});
 
 const handlers = createAdminUsersHandlers({
   findUsers: db.findUsers,
   countUsers: db.countUsers,
+  updateUsersRoleByIds: db.updateUsersRoleByIds,
+  canViewRole: db.canViewRole,
+  getRoleByName: db.getRoleByName,
   beginAgentTriggerUserDeletion: db.beginAgentTriggerUserDeletion,
   cancelAgentTriggerUserDeletion: db.cancelAgentTriggerUserDeletion,
   drainAgentTriggerDeliveriesForUser,
@@ -52,22 +71,27 @@ const conversationHandlers = createAdminUserConversationsHandlers({
   getMessages: db.getMessages,
 });
 
-router.use(requireJwtAuth, requireAdminAccess);
+router.use(requireJwtAuth, requireAdminOrHierarchyAccess);
 
-router.get('/', requireReadUsers, handlers.listUsers);
-router.get('/search', requireReadUsers, handlers.searchUsers);
+router.get('/', attachHierarchyScope, handlers.listUsers);
+router.get('/search', attachHierarchyScope, handlers.searchUsers);
 // router.delete('/:id', requireManageUsers, handlers.deleteUser);
 
-router.get('/:userId/conversations', requireReadUsers, conversationHandlers.listUserConversations);
+router.get(
+  '/:userId/conversations',
+  requireSubordinateAccess,
+  conversationHandlers.listUserConversations,
+);
 router.get(
   '/:userId/conversations/:conversationId',
-  requireReadUsers,
+  requireSubordinateAccess,
   conversationHandlers.getUserConversation,
 );
 router.get(
   '/:userId/conversations/:conversationId/messages',
-  requireReadUsers,
+  requireSubordinateAccess,
   conversationHandlers.getUserConversationMessages,
 );
+router.patch('/:userId/role', requireSubordinateAccess, handlers.reassignUserRole);
 
 module.exports = router;
