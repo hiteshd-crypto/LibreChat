@@ -65,6 +65,7 @@ export enum QueryKeys {
   adminUserConversations = 'adminUserConversations',
   adminUserConversation = 'adminUserConversation',
   adminUserMessages = 'adminUserMessages',
+  myHierarchy = 'myHierarchy',
   conversationTags = 'conversationTags',
   health = 'health',
   userTerms = 'userTerms',

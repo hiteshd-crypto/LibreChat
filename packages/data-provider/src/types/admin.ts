@@ -4,6 +4,18 @@ export interface TAdminRole {
   name: string;
   description?: string;
   permissions?: Record<string, Record<string, boolean>>;
+  /** Parent role name in the hierarchy tree; `null` for a top-level branch, ADMIN, or USER. */
+  parentRole?: string | null;
+  /** Denormalized tree depth (0 for top-level branches, ADMIN, USER). Display only. */
+  depth?: number;
+}
+
+/** The caller's own hierarchy access, from `GET /api/admin/hierarchy/me`. */
+export interface TMyHierarchy {
+  isAdmin: boolean;
+  canViewSubordinates: boolean;
+  viewableRoleNames: string[];
+  manageableRoleNames: string[];
 }
 
 export interface TAdminRoleListResponse {

@@ -34,4 +34,10 @@ describe('admin endpoint builders', () => {
       '/api/admin/users/u1/conversations/c9/messages',
     );
   });
+
+  it('builds hierarchy and user-role paths', () => {
+    expect(endpoints.adminHierarchyMe()).toBe('/api/admin/hierarchy/me');
+    expect(endpoints.adminUserRole('u1')).toBe('/api/admin/users/u1/role');
+    expect(endpoints.adminUserRole('a/b')).toBe('/api/admin/users/a%2Fb/role');
+  });
 });

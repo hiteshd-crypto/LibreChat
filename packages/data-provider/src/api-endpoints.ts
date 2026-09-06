@@ -523,6 +523,9 @@ export const adminUserConversation = (userId: string, conversationId: string) =>
   )}`;
 export const adminUserConversationMessages = (userId: string, conversationId: string) =>
   `${adminUserConversation(userId, conversationId)}/messages`;
+export const adminUserRole = (userId: string) =>
+  `${BASE_URL}/api/admin/users/${encodeURIComponent(userId)}/role`;
+export const adminHierarchyMe = () => `${BASE_URL}/api/admin/hierarchy/me`;
 export const getRole = (roleName: string) => `${roles()}/${encodeURIComponent(roleName)}`;
 export const updatePromptPermissions = (roleName: string) => `${getRole(roleName)}/prompts`;
 export const updateMemoryPermissions = (roleName: string) => `${getRole(roleName)}/memories`;

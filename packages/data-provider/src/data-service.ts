@@ -1348,11 +1348,27 @@ export function listAdminRoles(): Promise<adm.TAdminRoleListResponse> {
   return request.get(`${endpoints.adminRoles()}?limit=200`);
 }
 
+export function createAdminRole(body: {
+  name: string;
+  description?: string;
+  parentRole?: string | null;
+}): Promise<{ role: adm.TAdminRole }> {
+  return request.post(endpoints.adminRoles(), body);
+}
+
 export function updateAdminRole(
   name: string,
   body: { name?: string; description?: string },
 ): Promise<{ role: adm.TAdminRole }> {
   return request.patch(endpoints.adminRole(name), body);
+}
+
+/** Re-parents a role in the hierarchy tree (or `null` to make it top-level). */
+export function setAdminRoleParent(
+  name: string,
+  parentRole: string | null,
+): Promise<{ role: adm.TAdminRole }> {
+  return request.patch(endpoints.adminRole(name), { parentRole });
 }
 
 export function deleteAdminRole(name: string): Promise<{ success: true }> {
@@ -1405,6 +1421,16 @@ export function getAdminUserConversationMessages(
   conversationId: string,
 ): Promise<adm.TAdminUserMessagesResponse> {
   return request.get(endpoints.adminUserConversationMessages(userId, conversationId));
+}
+
+/** The caller's own hierarchy access — drives the admin guard and role pickers. */
+export function getMyHierarchy(): Promise<adm.TMyHierarchy> {
+  return request.get(endpoints.adminHierarchyMe());
+}
+
+/** Reassigns a user's role (hierarchy-scoped server-side). */
+export function setAdminUserRole(userId: string, role: string): Promise<{ success: true }> {
+  return request.patch(endpoints.adminUserRole(userId), { role });
 }
 
 export function updatePromptPermissions(
