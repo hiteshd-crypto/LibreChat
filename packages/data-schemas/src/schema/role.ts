@@ -97,6 +97,15 @@ const roleSchema: Schema<IRole> = new Schema({
     type: String,
     index: true,
   },
+  parentRole: {
+    type: String,
+    default: null,
+    index: true,
+  },
+  depth: {
+    type: Number,
+    default: 0,
+  },
 });
 
 roleSchema.index({ name: 1, tenantId: 1 }, { unique: true });

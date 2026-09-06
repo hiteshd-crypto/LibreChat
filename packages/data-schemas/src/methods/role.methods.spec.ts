@@ -861,6 +861,13 @@ describe('createRoleByName', () => {
 
     await expect(createRoleByName({ name: 'editor' })).rejects.toThrow(/already exists/);
   });
+
+  it('defaults a newly created role to a null parent and depth 0', async () => {
+    await createRoleByName({ name: 'PARENT_DEFAULT_TEST' });
+    const stored = await Role.findOne({ name: 'PARENT_DEFAULT_TEST' }).lean();
+    expect(stored?.parentRole ?? null).toBeNull();
+    expect(stored?.depth).toBe(0);
+  });
 });
 
 describe('deleteRoleByName', () => {

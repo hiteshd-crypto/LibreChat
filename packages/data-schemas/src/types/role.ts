@@ -83,6 +83,10 @@ export interface IRole extends Document {
     };
   };
   tenantId?: string;
+  /** Name of the parent role in the hierarchy tree. `null`/`undefined` = top-level branch. `ADMIN`/`USER` never set this. */
+  parentRole?: string | null;
+  /** Denormalized tree depth (0 for USER, ADMIN, and top-level branches). Display/pre-check only — never used for authorization. */
+  depth?: number;
 }
 
 export type RolePermissions = IRole['permissions'];
