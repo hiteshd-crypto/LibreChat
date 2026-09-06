@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { PrincipalType, SystemRoles } from 'librechat-data-provider';
 import { logger, isValidObjectIdString } from '@librechat/data-schemas';
 import type {
+  IRole,
   IUser,
   IConfig,
   AdminUserListItem,
@@ -24,6 +25,12 @@ export interface AdminUsersDeps {
     options?: { limit?: number; offset?: number; sort?: Record<string, 1 | -1> },
   ) => Promise<IUser[]>;
   countUsers: (filter?: FilterQuery<IUser>) => Promise<number>;
+  /** Bulk role reassignment by user id — already invalidates the auth-user-doc cache. */
+  updateUsersRoleByIds: (userIds: string[], newRole: string) => Promise<void>;
+  /** Hierarchy visibility check: may `actorRole` view/manage a user with `targetRole`? */
+  canViewRole: (actorRole: string, targetRole: string) => Promise<boolean>;
+  /** Role-existence lookup for the reassignment endpoint's `{ role }` body. */
+  getRoleByName: (name: string, fields?: string | string[] | null) => Promise<IRole | null>;
   beginAgentTriggerUserDeletion: (
     userId: string,
     startedAt: Date,
@@ -59,14 +66,29 @@ export interface AdminUsersDeps {
   }) => Promise<void>;
 }
 
+/** Narrows a user filter to the caller's viewable role names when a hierarchy scope is set. */
+function withHierarchyScope(
+  filter: FilterQuery<IUser>,
+  scope: ServerRequest['hierarchyScope'],
+): FilterQuery<IUser> {
+  if (!scope) {
+    return filter;
+  }
+  return { ...filter, role: { $in: scope.viewableRoleNames } };
+}
+
 export function createAdminUsersHandlers(deps: AdminUsersDeps): {
   listUsers: (req: ServerRequest, res: Response) => Promise<Response>;
   searchUsers: (req: ServerRequest, res: Response) => Promise<Response>;
   deleteUser: (req: ServerRequest, res: Response) => Promise<Response>;
+  reassignUserRole: (req: ServerRequest, res: Response) => Promise<Response>;
 } {
   const {
     findUsers,
     countUsers,
+    updateUsersRoleByIds,
+    canViewRole,
+    getRoleByName,
     beginAgentTriggerUserDeletion,
     cancelAgentTriggerUserDeletion,
     drainAgentTriggerDeliveriesForUser,
@@ -84,9 +106,10 @@ export function createAdminUsersHandlers(deps: AdminUsersDeps): {
   async function listUsersHandler(req: ServerRequest, res: Response) {
     try {
       const { limit, offset } = parsePagination(req.query);
+      const filter = withHierarchyScope({}, req.hierarchyScope);
       const [users, total] = await Promise.all([
-        findUsers({}, USER_LIST_FIELDS, { limit, offset, sort: { createdAt: -1 } }),
-        countUsers(),
+        findUsers(filter, USER_LIST_FIELDS, { limit, offset, sort: { createdAt: -1 } }),
+        countUsers(filter),
       ]);
 
       const mapped: AdminUserListItem[] = users.map((u) => ({
@@ -135,7 +158,10 @@ export function createAdminUsersHandlers(deps: AdminUsersDeps): {
       const regex = new RegExp(escaped, 'i');
 
       const users = await findUsers(
-        { $or: [{ name: regex }, { email: regex }, { username: regex }] },
+        withHierarchyScope(
+          { $or: [{ name: regex }, { email: regex }, { username: regex }] },
+          req.hierarchyScope,
+        ),
         '_id name email username avatar',
         { limit: searchLimit, sort: { name: 1 } },
       );
@@ -258,9 +284,68 @@ export function createAdminUsersHandlers(deps: AdminUsersDeps): {
     }
   }
 
+  /**
+   * `PATCH /api/admin/users/:userId/role` — reassigns a user's role.
+   *
+   * `requireSubordinateAccess` has already proved the caller may see the
+   * target's *current* role. This handler adds the second half of the two-sided
+   * check: a non-ADMIN caller must also be allowed to see the *requested* role
+   * (`canViewRole`), so a MANAGER can move an EMPLOYEE within its own subtree
+   * but never up to its own tier or sideways into another branch. `canViewRole`
+   * returns `true` for every role when the actor is ADMIN.
+   */
+  async function reassignUserRoleHandler(req: ServerRequest, res: Response) {
+    try {
+      const { userId } = req.params as { userId: string };
+      if (!isValidObjectIdString(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID format' });
+      }
+      const { role: requestedRole } = req.body as { role?: unknown };
+      if (typeof requestedRole !== 'string' || !requestedRole.trim()) {
+        return res.status(400).json({ error: 'role is required' });
+      }
+      const trimmedRole = requestedRole.trim();
+
+      const actorRole = req.user?.role ?? '';
+      const isAdmin = actorRole === SystemRoles.ADMIN;
+
+      const [target, requestedRoleDoc] = await Promise.all([
+        findUsers({ _id: userId }, 'role', { limit: 1 }).then((users) => users[0]),
+        getRoleByName(trimmedRole),
+      ]);
+      if (!target) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      if (!requestedRoleDoc) {
+        return res.status(400).json({ error: `Role "${trimmedRole}" does not exist` });
+      }
+
+      if (!isAdmin) {
+        const canAssign = await canViewRole(actorRole, trimmedRole);
+        if (!canAssign) {
+          return res.status(403).json({ error: 'Cannot assign a role outside your hierarchy' });
+        }
+      }
+
+      if (target.role === SystemRoles.ADMIN && trimmedRole !== SystemRoles.ADMIN) {
+        const adminCount = await countUsers({ role: SystemRoles.ADMIN });
+        if (adminCount <= 1) {
+          return res.status(400).json({ error: 'Cannot demote the last admin user' });
+        }
+      }
+
+      await updateUsersRoleByIds([userId], trimmedRole);
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      logger.error('[adminUsers] reassignUserRole error:', error);
+      return res.status(500).json({ error: 'Failed to reassign role' });
+    }
+  }
+
   return {
     listUsers: listUsersHandler,
     searchUsers: searchUsersHandler,
     deleteUser: deleteUserHandler,
+    reassignUserRole: reassignUserRoleHandler,
   };
 }

@@ -53,6 +53,9 @@ function createDeps(overrides: Partial<AdminUsersDeps> = {}): AdminUsersDeps {
   return {
     findUsers: jest.fn().mockResolvedValue([]),
     countUsers: jest.fn().mockResolvedValue(0),
+    updateUsersRoleByIds: jest.fn().mockResolvedValue(undefined),
+    canViewRole: jest.fn().mockResolvedValue(true),
+    getRoleByName: jest.fn().mockResolvedValue({ name: 'SALES_EMPLOYEE' }),
     beginAgentTriggerUserDeletion: jest.fn().mockResolvedValue('acquired'),
     cancelAgentTriggerUserDeletion: jest.fn().mockResolvedValue(true),
     drainAgentTriggerDeliveriesForUser: jest.fn().mockResolvedValue(undefined),
@@ -113,7 +116,7 @@ describe('createAdminUsersHandlers', () => {
         offset: 20,
         sort: { createdAt: -1 },
       });
-      expect(countUsers).toHaveBeenCalledWith();
+      expect(countUsers).toHaveBeenCalledWith({});
     });
 
     it('returns empty list when no users', async () => {
@@ -150,6 +153,38 @@ describe('createAdminUsersHandlers', () => {
 
       expect(status).toHaveBeenCalledWith(500);
       expect(json).toHaveBeenCalledWith({ error: 'Failed to list users' });
+    });
+
+    it('filters by viewableRoleNames when req.hierarchyScope is set', async () => {
+      const findUsers = jest.fn().mockResolvedValue([]);
+      const countUsers = jest.fn().mockResolvedValue(0);
+      const deps = createDeps({ findUsers, countUsers });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res } = createReqRes();
+      (req as unknown as { hierarchyScope: unknown }).hierarchyScope = {
+        viewableRoleNames: ['SALES_EMPLOYEE'],
+      };
+
+      await handlers.listUsers(req, res);
+
+      expect(findUsers).toHaveBeenCalledWith(
+        { role: { $in: ['SALES_EMPLOYEE'] } },
+        expect.any(String),
+        expect.any(Object),
+      );
+      expect(countUsers).toHaveBeenCalledWith({ role: { $in: ['SALES_EMPLOYEE'] } });
+    });
+
+    it('applies no role filter when req.hierarchyScope is null', async () => {
+      const findUsers = jest.fn().mockResolvedValue([]);
+      const deps = createDeps({ findUsers });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res } = createReqRes();
+      (req as unknown as { hierarchyScope: unknown }).hierarchyScope = null;
+
+      await handlers.listUsers(req, res);
+
+      expect(findUsers).toHaveBeenCalledWith({}, expect.any(String), expect.any(Object));
     });
   });
 
@@ -333,6 +368,120 @@ describe('createAdminUsersHandlers', () => {
 
       expect(status).toHaveBeenCalledWith(500);
       expect(json).toHaveBeenCalledWith({ error: 'Failed to search users' });
+    });
+
+    it('adds the role filter alongside the $or clause when scoped', async () => {
+      const findUsers = jest.fn().mockResolvedValue([]);
+      const deps = createDeps({ findUsers });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res } = createReqRes({ query: { q: 'ali' } });
+      (req as unknown as { hierarchyScope: unknown }).hierarchyScope = {
+        viewableRoleNames: ['SALES_EMPLOYEE'],
+      };
+
+      await handlers.searchUsers(req, res);
+
+      const filter = findUsers.mock.calls[0][0];
+      expect(filter.role).toEqual({ $in: ['SALES_EMPLOYEE'] });
+      expect(filter.$or).toBeDefined();
+    });
+  });
+
+  describe('reassignUserRole', () => {
+    it('reassigns within the actor subtree and returns 200', async () => {
+      const findUsers = jest.fn().mockResolvedValue([mockUser({ role: 'SALES_EMPLOYEE' })]);
+      const updateUsersRoleByIds = jest.fn().mockResolvedValue(undefined);
+      const canViewRole = jest.fn().mockResolvedValue(true);
+      const deps = createDeps({
+        findUsers,
+        updateUsersRoleByIds,
+        canViewRole,
+        getRoleByName: jest.fn().mockResolvedValue({ name: 'SALES_EMPLOYEE_TIER_2' }),
+      });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status } = createReqRes({
+        params: { userId: validUserId },
+        user: { id: 'mgr-1', role: 'SALES_MANAGER' },
+      });
+      (req as unknown as { body: unknown }).body = { role: 'SALES_EMPLOYEE_TIER_2' };
+
+      await handlers.reassignUserRole(req, res);
+
+      expect(canViewRole).toHaveBeenCalledWith('SALES_MANAGER', 'SALES_EMPLOYEE_TIER_2');
+      expect(updateUsersRoleByIds).toHaveBeenCalledWith([validUserId], 'SALES_EMPLOYEE_TIER_2');
+      expect(status).toHaveBeenCalledWith(200);
+    });
+
+    it('rejects a target role outside the actor subtree with 403', async () => {
+      const updateUsersRoleByIds = jest.fn();
+      const deps = createDeps({
+        findUsers: jest.fn().mockResolvedValue([mockUser({ role: 'SALES_EMPLOYEE' })]),
+        updateUsersRoleByIds,
+        canViewRole: jest.fn().mockResolvedValue(false),
+        getRoleByName: jest.fn().mockResolvedValue({ name: 'SUPPORT_MANAGER' }),
+      });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status } = createReqRes({
+        params: { userId: validUserId },
+        user: { id: 'mgr-1', role: 'SALES_MANAGER' },
+      });
+      (req as unknown as { body: unknown }).body = { role: 'SUPPORT_MANAGER' };
+
+      await handlers.reassignUserRole(req, res);
+
+      expect(updateUsersRoleByIds).not.toHaveBeenCalled();
+      expect(status).toHaveBeenCalledWith(403);
+    });
+
+    it('returns 400 when the requested role does not exist', async () => {
+      const deps = createDeps({
+        findUsers: jest.fn().mockResolvedValue([mockUser({ role: 'SALES_EMPLOYEE' })]),
+        getRoleByName: jest.fn().mockResolvedValue(null),
+      });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status } = createReqRes({
+        params: { userId: validUserId },
+        user: { id: 'mgr-1', role: 'SALES_MANAGER' },
+      });
+      (req as unknown as { body: unknown }).body = { role: 'GHOST_ROLE' };
+
+      await handlers.reassignUserRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(400);
+    });
+
+    it('returns 400 for a malformed userId', async () => {
+      const deps = createDeps();
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status } = createReqRes({ params: { userId: 'not-an-id' } });
+      (req as unknown as { body: unknown }).body = { role: 'X' };
+
+      await handlers.reassignUserRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(400);
+    });
+
+    it('lets an ADMIN actor skip the descendant check', async () => {
+      const updateUsersRoleByIds = jest.fn().mockResolvedValue(undefined);
+      const canViewRole = jest.fn();
+      const deps = createDeps({
+        findUsers: jest.fn().mockResolvedValue([mockUser({ role: 'SALES_EMPLOYEE' })]),
+        updateUsersRoleByIds,
+        canViewRole,
+        getRoleByName: jest.fn().mockResolvedValue({ name: 'SUPPORT_MANAGER' }),
+      });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status } = createReqRes({
+        params: { userId: validUserId },
+        user: { _id: new Types.ObjectId(), role: SystemRoles.ADMIN },
+      });
+      (req as unknown as { body: unknown }).body = { role: 'SUPPORT_MANAGER' };
+
+      await handlers.reassignUserRole(req, res);
+
+      expect(canViewRole).not.toHaveBeenCalled();
+      expect(updateUsersRoleByIds).toHaveBeenCalledWith([validUserId], 'SUPPORT_MANAGER');
+      expect(status).toHaveBeenCalledWith(200);
     });
   });
 
