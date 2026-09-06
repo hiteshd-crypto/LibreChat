@@ -6,6 +6,7 @@ export * from './notFound';
 export * from './balance';
 export * from './json';
 export * from './capabilities';
+export * from './hierarchy';
 export * from './auth';
 export {
   requestContextMiddleware,
