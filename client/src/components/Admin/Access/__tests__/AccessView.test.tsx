@@ -8,6 +8,7 @@ const mockDeleteMutate = jest.fn();
 
 const idleMutation = (mutate: jest.Mock) => ({
   mutate,
+  mutateAsync: mutate,
   reset: jest.fn(),
   isLoading: false,
   error: null,

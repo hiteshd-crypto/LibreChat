@@ -60,28 +60,37 @@ export default function EditRoleDialog({
     (r) => r.name !== role.name && !SYSTEM_ROLES.has(r.name),
   );
 
-  const saveParent = () => {
-    parentMutation.mutate(
-      { name: role.name, parentRole: parentRole || null },
-      { onSuccess: () => onClose() },
-    );
-  };
+  const isSaving = updateMutation.isLoading || parentMutation.isLoading;
 
-  const saveDetails = () => {
+  /**
+   * One Save for the whole tab. The backend treats a `parentRole` change as its
+   * own operation (separate early-return branch in `updateRoleHandler`), so a
+   * combined edit goes out as up to two sequential requests: re-parent first
+   * (keyed by the current name), then rename/description.
+   */
+  const saveDetails = async () => {
     const trimmedName = name.trim();
     const trimmedDescription = description.trim();
-    updateMutation.mutate(
-      {
-        name: role.name,
-        updates: {
-          name: trimmedName && trimmedName !== role.name ? trimmedName : undefined,
-          // Send the empty string (not undefined) so an existing description can be cleared.
-          description:
-            trimmedDescription !== (role.description ?? '') ? trimmedDescription : undefined,
-        },
-      },
-      { onSuccess: () => onClose() },
-    );
+    const nextName = trimmedName && trimmedName !== role.name ? trimmedName : undefined;
+    // Send the empty string (not undefined) so an existing description can be cleared.
+    const nextDescription =
+      trimmedDescription !== (role.description ?? '') ? trimmedDescription : undefined;
+    const parentChanged = !isSystem && parentRole !== currentParent;
+
+    try {
+      if (parentChanged) {
+        await parentMutation.mutateAsync({ name: role.name, parentRole: parentRole || null });
+      }
+      if (nextName !== undefined || nextDescription !== undefined) {
+        await updateMutation.mutateAsync({
+          name: role.name,
+          updates: { name: nextName, description: nextDescription },
+        });
+      }
+      onClose();
+    } catch {
+      /* error surfaces via mutationError below */
+    }
   };
 
   return (
@@ -116,46 +125,26 @@ export default function EditRoleDialog({
                 <Input value={description} onChange={(e) => setDescription(e.target.value)} />
               </label>
               {!isSystem ? (
-                <div className="flex flex-col gap-1 text-sm text-text-secondary">
-                  <label className="flex flex-col gap-1">
-                    {localize('com_admin_role_parent_label')}
-                    <select
-                      className="rounded-lg border border-border-light bg-surface-primary px-2 py-1.5 text-sm text-text-primary"
-                      value={parentRole}
-                      onChange={(e) => setParentRole(e.target.value)}
-                    >
-                      <option value="">{localize('com_admin_role_top_level')}</option>
-                      {parentChoices.map((r) => (
-                        <option key={r.name} value={r.name}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    className="self-start"
-                    disabled={parentMutation.isLoading || parentRole === currentParent}
-                    onClick={saveParent}
+                <label className="flex flex-col gap-1 text-sm text-text-secondary">
+                  {localize('com_admin_role_parent_label')}
+                  <select
+                    className="rounded-lg border border-border-light bg-surface-primary px-2 py-1.5 text-sm text-text-primary"
+                    value={parentRole}
+                    onChange={(e) => setParentRole(e.target.value)}
                   >
-                    {parentMutation.isLoading ? (
-                      <Spinner />
-                    ) : (
-                      localize('com_admin_role_save_parent')
-                    )}
-                  </Button>
-                </div>
+                    <option value="">{localize('com_admin_role_top_level')}</option>
+                    {parentChoices.map((r) => (
+                      <option key={r.name} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               ) : null}
               {error ? <p className="text-sm text-text-secondary">{error}</p> : null}
               <div className="flex items-center justify-between">
-                <Button
-                  variant="submit"
-                  type="button"
-                  disabled={updateMutation.isLoading}
-                  onClick={saveDetails}
-                >
-                  {updateMutation.isLoading ? <Spinner /> : localize('com_ui_save')}
+                <Button variant="submit" type="button" disabled={isSaving} onClick={saveDetails}>
+                  {isSaving ? <Spinner /> : localize('com_ui_save')}
                 </Button>
                 {!isSystem && !confirmDelete ? (
                   <Button variant="outline" type="button" onClick={() => setConfirmDelete(true)}>

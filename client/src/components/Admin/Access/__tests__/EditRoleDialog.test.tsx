@@ -3,10 +3,16 @@ import { render, screen } from '@testing-library/react';
 import EditRoleDialog from '../EditRoleDialog';
 
 const mockUpdate = jest.fn();
-
-const idle = (mutate: jest.Mock) => ({ mutate, reset: jest.fn(), isLoading: false, error: null });
-
 const mockSetParent = jest.fn();
+
+/** react-query v4 mutation stub — the dialog uses `mutateAsync`. */
+const idle = (fn: jest.Mock) => ({
+  mutate: fn,
+  mutateAsync: fn,
+  reset: jest.fn(),
+  isLoading: false,
+  error: null,
+});
 
 jest.mock('~/data-provider', () => ({
   useUpdateRole: () => idle(mockUpdate),
@@ -38,7 +44,11 @@ jest.mock('@librechat/client', () => ({
   OGDialogTemplate: ({ main }: any) => <div>{main}</div>,
 }));
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockUpdate.mockResolvedValue({ role: {} });
+  mockSetParent.mockResolvedValue({ role: {} });
+});
 
 const getInput = (label: string) =>
   screen.getByText(label).closest('label')!.querySelector('input') as HTMLInputElement;
@@ -49,19 +59,19 @@ describe('EditRoleDialog', () => {
     const desc = getInput('com_admin_access_role_description');
     await userEvent.clear(desc);
     await userEvent.click(screen.getByText('com_ui_save'));
-    expect(mockUpdate).toHaveBeenCalledWith(
-      { name: 'support', updates: { name: undefined, description: '' } },
-      expect.anything(),
-    );
+    expect(mockUpdate).toHaveBeenCalledWith({
+      name: 'support',
+      updates: { name: undefined, description: '' },
+    });
   });
 
-  it('omits description when it is unchanged', async () => {
-    render(<EditRoleDialog role={{ name: 'support', description: 'temp' }} onClose={jest.fn()} />);
+  it('does nothing but close when nothing changed', async () => {
+    const onClose = jest.fn();
+    render(<EditRoleDialog role={{ name: 'support', description: 'temp' }} onClose={onClose} />);
     await userEvent.click(screen.getByText('com_ui_save'));
-    expect(mockUpdate).toHaveBeenCalledWith(
-      { name: 'support', updates: { name: undefined, description: undefined } },
-      expect.anything(),
-    );
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockSetParent).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('disables the name field for a system role', () => {
@@ -80,14 +90,32 @@ describe('EditRoleDialog', () => {
     expect(screen.getByText('com_admin_access_user_role_note')).toBeInTheDocument();
   });
 
-  it('re-parents a custom role via useSetRoleParent', async () => {
-    render(<EditRoleDialog role={{ name: 'support', parentRole: null }} onClose={jest.fn()} />);
+  it('re-parents a custom role from the single Save button', async () => {
+    const onClose = jest.fn();
+    render(<EditRoleDialog role={{ name: 'support', parentRole: null }} onClose={onClose} />);
     await userEvent.selectOptions(screen.getByRole('combobox'), 'SUPERVISOR');
-    await userEvent.click(screen.getByText('com_admin_role_save_parent'));
-    expect(mockSetParent).toHaveBeenCalledWith(
-      { name: 'support', parentRole: 'SUPERVISOR' },
-      expect.anything(),
+    await userEvent.click(screen.getByText('com_ui_save'));
+    expect(mockSetParent).toHaveBeenCalledWith({ name: 'support', parentRole: 'SUPERVISOR' });
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('saves a parent change and a description change together', async () => {
+    render(
+      <EditRoleDialog
+        role={{ name: 'support', description: 'old', parentRole: null }}
+        onClose={jest.fn()}
+      />,
     );
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'SUPERVISOR');
+    await userEvent.clear(getInput('com_admin_access_role_description'));
+    await userEvent.type(getInput('com_admin_access_role_description'), 'new');
+    await userEvent.click(screen.getByText('com_ui_save'));
+    expect(mockSetParent).toHaveBeenCalledWith({ name: 'support', parentRole: 'SUPERVISOR' });
+    expect(mockUpdate).toHaveBeenCalledWith({
+      name: 'support',
+      updates: { name: undefined, description: 'new' },
+    });
   });
 
   it('hides the Reports-to control for a system role', () => {
