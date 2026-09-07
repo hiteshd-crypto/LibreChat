@@ -4,6 +4,7 @@ import type { TAdminRole } from 'librechat-data-provider';
 import CreateRoleDialog from './CreateRoleDialog';
 import { useAdminRoles } from '~/data-provider';
 import EditRoleDialog from './EditRoleDialog';
+import { orderRolesByTree } from './roleTree';
 import { SYSTEM_ROLES } from './constants';
 import { useLocalize } from '~/hooks';
 import RoleRow from './RoleRow';
@@ -15,10 +16,11 @@ export default function AccessView() {
   const [editTarget, setEditTarget] = useState<TAdminRole | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const roles = useMemo(() => {
+  const orderedRoles = useMemo(() => {
     const list = data?.roles ?? [];
     const q = search.trim().toLowerCase();
-    return q ? list.filter((r) => r.name.toLowerCase().includes(q)) : list;
+    const filtered = q ? list.filter((r) => r.name.toLowerCase().includes(q)) : list;
+    return orderRolesByTree(filtered);
   }, [data?.roles, search]);
 
   if (isLoading) {
@@ -47,11 +49,11 @@ export default function AccessView() {
         </Button>
       </div>
 
-      {roles.length === 0 ? (
+      {orderedRoles.length === 0 ? (
         <p className="text-sm text-text-secondary">{localize('com_admin_access_empty')}</p>
       ) : (
-        roles.map((role) => (
-          <div key={role.name} style={{ marginLeft: `${(role.depth ?? 0) * 1.25}rem` }}>
+        orderedRoles.map(({ role, depth }) => (
+          <div key={role.name} style={{ marginLeft: `${depth * 1.25}rem` }}>
             <RoleRow
               role={role}
               isSystem={SYSTEM_ROLES.has(role.name)}
