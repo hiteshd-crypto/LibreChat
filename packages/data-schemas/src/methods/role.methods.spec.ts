@@ -1253,18 +1253,21 @@ describe('listRoles', () => {
     expect(roles[0].name).toBe('only-role');
   });
 
-  it('returns only name and description fields', async () => {
+  it('projects name, description, and hierarchy fields but not permissions', async () => {
     await Role.create({
       name: 'editor',
       description: 'Can edit',
       permissions: { PROMPTS: { USE: true } },
     });
+    await createRoleByName({ name: 'editor-lead' });
+    await createRoleByName({ name: 'editor-junior', parentRole: 'editor-lead' });
 
     const roles = await listRoles();
+    const junior = roles.find((r) => r.name === 'editor-junior');
 
-    expect(roles).toHaveLength(1);
-    expect(roles[0].name).toBe('editor');
-    expect(roles[0].description).toBe('Can edit');
+    expect(roles.find((r) => r.name === 'editor')?.description).toBe('Can edit');
+    expect(junior?.parentRole).toBe('editor-lead');
+    expect(junior?.depth).toBe(1);
     expect(roles[0]._id).toBeDefined();
     expect('permissions' in roles[0]).toBe(false);
   });

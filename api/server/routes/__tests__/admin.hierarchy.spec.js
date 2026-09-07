@@ -161,6 +161,17 @@ describe('Role hierarchy — Integration', () => {
     expect(new Set(names)).toEqual(new Set(['SALES_MANAGER', 'SALES_EMPLOYEE']));
   });
 
+  it('listRoles projects parentRole and depth for the Access tree', async () => {
+    await seedTree();
+    const roles = await db.listRoles({ limit: 200 });
+    const salesEmployee = roles.find((r) => r.name === 'SALES_EMPLOYEE');
+    expect(salesEmployee.parentRole).toBe('SALES_MANAGER');
+    expect(salesEmployee.depth).toBe(2);
+    const supervisor = roles.find((r) => r.name === 'SUPERVISOR');
+    expect(supervisor.parentRole ?? null).toBeNull();
+    expect(supervisor.depth).toBe(0);
+  });
+
   it('lets a SALES_MANAGER list only descendant users', async () => {
     await seedTree();
     const mgrId = await createUser('SALES_MANAGER');

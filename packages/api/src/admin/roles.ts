@@ -93,7 +93,13 @@ interface RoleMemberParams extends RoleNameParams {
   userId: string;
 }
 
-export type RoleListItem = { _id: Types.ObjectId | string; name: string; description?: string };
+export type RoleListItem = {
+  _id: Types.ObjectId | string;
+  name: string;
+  description?: string;
+  parentRole?: string | null;
+  depth?: number;
+};
 
 export interface AdminRolesDeps {
   listRoles: (options?: { limit?: number; offset?: number }) => Promise<RoleListItem[]>;

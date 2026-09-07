@@ -42,7 +42,7 @@ export function createRoleMethods(
   listRoles: (options?: {
     limit?: number;
     offset?: number;
-  }) => Promise<Pick<IRole, '_id' | 'name' | 'description'>[]>;
+  }) => Promise<Pick<IRole, '_id' | 'name' | 'description' | 'parentRole' | 'depth'>[]>;
   countRoles: () => Promise<number>;
   initializeRoles: () => Promise<void>;
   getRoleByName: (roleName: string, fieldsToSelect?: string | string[] | null) => Promise<IRole>;
@@ -143,17 +143,18 @@ export function createRoleMethods(
   }
 
   /**
-   * List all roles in the system. Returns only name and description (projected).
+   * List all roles in the system. Projects name, description, and the hierarchy
+   * fields (`parentRole`, `depth`) the admin Access tree renders from.
    */
   async function listRoles(options?: {
     limit?: number;
     offset?: number;
-  }): Promise<Pick<IRole, '_id' | 'name' | 'description'>[]> {
+  }): Promise<Pick<IRole, '_id' | 'name' | 'description' | 'parentRole' | 'depth'>[]> {
     const Role = mongoose.models.Role as Model<IRole>;
     const limit = options?.limit ?? 50;
     const offset = options?.offset ?? 0;
     return await Role.find({})
-      .select('name description')
+      .select('name description parentRole depth')
       .sort({ name: 1 })
       .skip(offset)
       .limit(limit)
