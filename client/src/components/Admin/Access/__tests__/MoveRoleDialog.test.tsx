@@ -56,12 +56,26 @@ describe('MoveRoleDialog', () => {
         onClose={jest.fn()}
       />,
     );
-    expect(screen.getByText(/com_admin_role_move_confirm/)).toBeInTheDocument();
+    // roles[2] (EMP) is a leaf — no sub-role clause.
+    expect(screen.getByText(/com_admin_role_move_confirm:/)).toBeInTheDocument();
+    expect(screen.queryByText(/com_admin_role_move_confirm_subtree/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('com_ui_confirm'));
     expect(mockMutate).toHaveBeenCalledWith(
       { roleKey: 'emp', parentRole: 'sup' },
       expect.any(Object),
     );
+  });
+
+  it('adds the sub-role clause only when the moved role has descendants', () => {
+    render(
+      <MoveRoleDialog
+        move={{ role: roles[0], newParentKey: 'support-root' }}
+        roles={[...roles, r('support-root', 'SUPPORT')]}
+        labelMap={new Map([...labelMap, ['support-root', 'SUPPORT']])}
+        onClose={jest.fn()}
+      />,
+    );
+    expect(screen.getByText(/com_admin_role_move_confirm_subtree/)).toBeInTheDocument();
   });
 
   it('keyboard mode offers only same-branch, non-descendant targets', async () => {

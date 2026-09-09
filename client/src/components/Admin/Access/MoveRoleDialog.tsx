@@ -74,11 +74,16 @@ export default function MoveRoleDialog({
           <div className="flex flex-col gap-3">
             {move.newParentKey ? (
               <p className="text-sm text-text-primary">
-                {localize('com_admin_role_move_confirm', {
-                  0: label(move.role.roleKey),
-                  1: label(targetKey),
-                  2: String(subtreeSize),
-                })}
+                {subtreeSize > 0
+                  ? localize('com_admin_role_move_confirm_subtree', {
+                      0: label(move.role.roleKey),
+                      1: label(targetKey),
+                      2: String(subtreeSize),
+                    })
+                  : localize('com_admin_role_move_confirm', {
+                      0: label(move.role.roleKey),
+                      1: label(targetKey),
+                    })}
               </p>
             ) : (
               <label className="flex flex-col gap-1 text-sm text-text-secondary">
