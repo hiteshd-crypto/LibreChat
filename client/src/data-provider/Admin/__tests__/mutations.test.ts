@@ -38,7 +38,7 @@ describe('admin membership mutations', () => {
     const invalidate = jest.spyOn(client, 'invalidateQueries');
 
     const { result } = renderHook(() => useRemoveRoleMember(), { wrapper: makeWrapper(client) });
-    result.current.mutate({ roleName: 'ADMIN', userId: 'u1' });
+    result.current.mutate({ roleKey: 'ADMIN', userId: 'u1' });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(invalidate).toHaveBeenCalledWith([QueryKeys.user]);
@@ -50,7 +50,7 @@ describe('admin membership mutations', () => {
     const invalidate = jest.spyOn(client, 'invalidateQueries');
 
     const { result } = renderHook(() => useAddRoleMember(), { wrapper: makeWrapper(client) });
-    result.current.mutate({ roleName: 'ADMIN', userId: 'u1' });
+    result.current.mutate({ roleKey: 'ADMIN', userId: 'u1' });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(invalidate).toHaveBeenCalledWith([QueryKeys.user]);
@@ -80,7 +80,7 @@ describe('hierarchy tree mutations', () => {
     const invalidate = jest.spyOn(client, 'invalidateQueries');
 
     const { result } = renderHook(() => useSetRoleParent(), { wrapper: makeWrapper(client) });
-    result.current.mutate({ name: 'SALES_MANAGER', parentRole: null });
+    result.current.mutate({ roleKey: 'SALES_MANAGER', parentRole: null });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(dataService.setAdminRoleParent).toHaveBeenCalledWith('SALES_MANAGER', null);

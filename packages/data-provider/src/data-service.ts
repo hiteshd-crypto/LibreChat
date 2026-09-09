@@ -1351,43 +1351,44 @@ export function listAdminRoles(): Promise<adm.TAdminRoleListResponse> {
 export function createAdminRole(body: {
   name: string;
   description?: string;
+  /** Parent role's `roleKey`, or `null`/omitted for a top-level role. */
   parentRole?: string | null;
 }): Promise<{ role: adm.TAdminRole }> {
   return request.post(endpoints.adminRoles(), body);
 }
 
 export function updateAdminRole(
-  name: string,
+  roleKey: string,
   body: { name?: string; description?: string },
 ): Promise<{ role: adm.TAdminRole }> {
-  return request.patch(endpoints.adminRole(name), body);
+  return request.patch(endpoints.adminRole(roleKey), body);
 }
 
-/** Re-parents a role in the hierarchy tree (or `null` to make it top-level). */
+/** Re-parents a role within its branch. `parentRole` is the new parent's `roleKey`. */
 export function setAdminRoleParent(
-  name: string,
+  roleKey: string,
   parentRole: string | null,
 ): Promise<{ role: adm.TAdminRole }> {
-  return request.patch(endpoints.adminRole(name), { parentRole });
+  return request.patch(endpoints.adminRole(roleKey), { parentRole });
 }
 
-export function deleteAdminRole(name: string): Promise<{ success: true }> {
-  return request.delete(endpoints.adminRole(name));
+export function deleteAdminRole(roleKey: string): Promise<{ success: true }> {
+  return request.delete(endpoints.adminRole(roleKey));
 }
 
 export function listAdminRoleMembers(
-  name: string,
+  roleKey: string,
   params?: { limit?: number; offset?: number },
 ): Promise<adm.TAdminMemberListResponse> {
-  return request.get(endpoints.adminRoleMembers(name, params));
+  return request.get(endpoints.adminRoleMembers(roleKey, params));
 }
 
-export function addAdminRoleMember(name: string, userId: string): Promise<{ success: true }> {
-  return request.post(endpoints.adminRoleMembers(name), { userId });
+export function addAdminRoleMember(roleKey: string, userId: string): Promise<{ success: true }> {
+  return request.post(endpoints.adminRoleMembers(roleKey), { userId });
 }
 
-export function removeAdminRoleMember(name: string, userId: string): Promise<{ success: true }> {
-  return request.delete(endpoints.adminRoleMember(name, userId));
+export function removeAdminRoleMember(roleKey: string, userId: string): Promise<{ success: true }> {
+  return request.delete(endpoints.adminRoleMember(roleKey, userId));
 }
 
 /* Admin — users + read-only conversation viewer */
