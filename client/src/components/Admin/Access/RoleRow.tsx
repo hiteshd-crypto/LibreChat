@@ -49,18 +49,6 @@ export default function RoleRow({
         ) : null}
       </span>
 
-      {showGrip ? (
-        <button
-          type="button"
-          ref={dragHandleRef}
-          title={localize('com_admin_role_action_move')}
-          aria-label={localize('com_admin_role_action_move')}
-          className="shrink-0 cursor-grab text-text-secondary hover:text-text-primary"
-          onClick={onKeyboardMove}
-        >
-          <GripVertical className="size-4" aria-hidden="true" />
-        </button>
-      ) : null}
       {showAdd ? (
         <button
           type="button"
@@ -81,6 +69,18 @@ export default function RoleRow({
       >
         <Pencil className="size-4" aria-hidden="true" />
       </button>
+      {showGrip ? (
+        <button
+          type="button"
+          ref={dragHandleRef}
+          title={localize('com_admin_role_action_move')}
+          aria-label={localize('com_admin_role_action_move')}
+          className="shrink-0 cursor-grab text-text-secondary hover:text-text-primary"
+          onClick={onKeyboardMove}
+        >
+          <GripVertical className="size-4" aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
 }
