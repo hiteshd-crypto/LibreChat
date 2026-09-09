@@ -32,22 +32,19 @@ const MAX_NAME_LENGTH = 500;
 const MAX_DESCRIPTION_LENGTH = 2000;
 const CONTROL_CHAR_RE = /\p{Cc}/u;
 /**
- * Role names that would create semantically ambiguous URLs.
- * e.g. GET /api/admin/roles/members — is that "list roles" or "get role named members"?
- * Express routing resolves this correctly (single vs multi-segment), but the URLs
- * are confusing for API consumers. Keep in sync with sub-path routes in routes/admin/roles.js.
+ * A `roleKey` route param is a system-role sentinel (`ADMIN`/`USER`) or a custom
+ * role's `_id` string. The shape is not enforced here — an unknown key resolves
+ * to a 404 via `getRoleByName` — only that it is a sane, non-control string.
  */
-const RESERVED_ROLE_NAMES = new Set(['members', 'permissions']);
-
-function validateNameParam(name: string): string | null {
-  if (!name || typeof name !== 'string') {
-    return 'name parameter is required';
+function validateRoleKeyParam(roleKey: string): string | null {
+  if (!roleKey || typeof roleKey !== 'string') {
+    return 'roleKey parameter is required';
   }
-  if (name.length > MAX_NAME_LENGTH) {
-    return `name must not exceed ${MAX_NAME_LENGTH} characters`;
+  if (roleKey.length > MAX_NAME_LENGTH) {
+    return `roleKey must not exceed ${MAX_NAME_LENGTH} characters`;
   }
-  if (CONTROL_CHAR_RE.test(name)) {
-    return 'name contains invalid characters';
+  if (CONTROL_CHAR_RE.test(roleKey)) {
+    return 'roleKey contains invalid characters';
   }
   return null;
 }
@@ -66,9 +63,6 @@ function validateRoleName(name: unknown, required: boolean): string | null {
   if (CONTROL_CHAR_RE.test(trimmed)) {
     return 'name contains invalid characters';
   }
-  if (RESERVED_ROLE_NAMES.has(trimmed)) {
-    return 'name is a reserved path segment';
-  }
   return null;
 }
 
@@ -85,16 +79,17 @@ function validateDescription(description: unknown): string | null {
   return null;
 }
 
-interface RoleNameParams {
-  name: string;
+interface RoleKeyParams {
+  roleKey: string;
 }
 
-interface RoleMemberParams extends RoleNameParams {
+interface RoleMemberParams extends RoleKeyParams {
   userId: string;
 }
 
 export type RoleListItem = {
   _id: Types.ObjectId | string;
+  roleKey: string;
   name: string;
   description?: string;
   parentRole?: string | null;
@@ -130,14 +125,11 @@ export interface AdminRolesDeps {
     fields?: string | string[] | null,
   ) => Promise<IUser | null>;
   updateUser: (userId: string, data: Partial<IUser>) => Promise<IUser | null>;
-  updateUsersByRole: (oldRole: string, newRole: string) => Promise<void>;
-  findUserIdsByRole: (roleName: string) => Promise<string[]>;
-  updateUsersRoleByIds: (userIds: string[], newRole: string) => Promise<void>;
   listUsersByRole: (
-    roleName: string,
+    roleKey: string,
     options?: { limit?: number; offset?: number },
   ) => Promise<IUser[]>;
-  countUsersByRole: (roleName: string) => Promise<number>;
+  countUsersByRole: (roleKey: string) => Promise<number>;
   /** Removes the per-principal config override (keyed by type + name, not ObjectId). */
   deleteConfig: (
     principalType: PrincipalType,
@@ -189,9 +181,6 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
     grantCapability,
     findUser,
     updateUser,
-    updateUsersByRole,
-    findUserIdsByRole,
-    updateUsersRoleByIds,
     listUsersByRole,
     countUsersByRole,
     deleteConfig,
@@ -207,6 +196,7 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
    * propagated. Sequential to keep the per-tenant hash chain ordered. */
   async function emitGrantRemovals(
     req: ServerRequest,
+    roleKey: string,
     roleName: string,
     grants: ISystemGrant[],
   ): Promise<void> {
@@ -223,7 +213,7 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
           outcome: 'success',
           severity: 'warning',
           actor: { type: 'user', id: userId, name: actorName },
-          target: { type: PrincipalType.ROLE, id: roleName, name: roleName },
+          target: { type: PrincipalType.ROLE, id: roleKey, name: roleName },
           metadata: { capability: grant.capability },
           context,
           /** Scope each entry to the removed grant's own tenant — a platform
@@ -250,12 +240,12 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
 
   async function getRoleHandler(req: ServerRequest, res: Response) {
     try {
-      const { name } = req.params as RoleNameParams;
-      const paramError = validateNameParam(name);
+      const { roleKey } = req.params as RoleKeyParams;
+      const paramError = validateRoleKeyParam(roleKey);
       if (paramError) {
         return res.status(400).json({ error: paramError });
       }
-      const role = await getRoleByName(name);
+      const role = await getRoleByName(roleKey);
       if (!role) {
         return res.status(404).json({ error: 'Role not found' });
       }
@@ -289,12 +279,15 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(400).json({ error: 'permissions must be an object' });
       }
       if (parentRole != null) {
-        if (typeof parentRole !== 'string' || isSystemRoleName(parentRole)) {
-          return res.status(400).json({ error: 'parentRole cannot be a system role' });
+        if (typeof parentRole !== 'string') {
+          return res.status(400).json({ error: 'parentRole must be a roleKey string' });
         }
         const parent = await getRoleByName(parentRole);
         if (!parent) {
           return res.status(400).json({ error: `Parent role "${parentRole}" does not exist` });
+        }
+        if (isSystemRoleName(parent.name)) {
+          return res.status(400).json({ error: 'parentRole cannot be a system role' });
         }
       }
       const roleData: Partial<IRole> = {
@@ -310,7 +303,7 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       const role = await createRoleByName(roleData);
       await grantCapability({
         principalType: PrincipalType.ROLE,
-        principalId: role.name,
+        principalId: role.roleKey,
         capability: SystemCapabilities.VIEW_SUBORDINATES,
         tenantId: req.user?.tenantId,
       });
@@ -324,56 +317,10 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
     }
   }
 
-  async function rollbackMigratedUsers(
-    migratedIds: string[],
-    currentName: string,
-    newName: string,
-  ): Promise<void> {
-    if (migratedIds.length === 0) {
-      return;
-    }
-    try {
-      await updateUsersRoleByIds(migratedIds, currentName);
-    } catch (rollbackError) {
-      logger.error(
-        `[adminRoles] CRITICAL: rename rollback failed — ${migratedIds.length} users have dangling role "${newName}": [${migratedIds.join(', ')}]`,
-        rollbackError,
-      );
-    }
-  }
-
-  /**
-   * Renames a role by migrating users to the new name and updating the role document.
-   *
-   * The ID snapshot from `findUserIdsByRole` is a point-in-time read. Users assigned
-   * to `currentName` between the snapshot and the bulk `updateUsersByRole` write will
-   * be moved to `newName` but will NOT be reverted on rollback. This window is narrow
-   * and only relevant under concurrent admin operations during a rename.
-   */
-  async function renameRole(
-    currentName: string,
-    newName: string,
-    extraUpdates?: Partial<IRole>,
-  ): Promise<IRole | null> {
-    const migratedIds = await findUserIdsByRole(currentName);
-    await updateUsersByRole(currentName, newName);
-    try {
-      const updates: Partial<IRole> = { name: newName, ...extraUpdates };
-      const role = await updateRoleByName(currentName, updates);
-      if (!role) {
-        await rollbackMigratedUsers(migratedIds, currentName, newName);
-      }
-      return role;
-    } catch (error) {
-      await rollbackMigratedUsers(migratedIds, currentName, newName);
-      throw error;
-    }
-  }
-
   async function updateRoleHandler(req: ServerRequest, res: Response) {
     try {
-      const { name } = req.params as RoleNameParams;
-      const paramError = validateNameParam(name);
+      const { roleKey } = req.params as RoleKeyParams;
+      const paramError = validateRoleKeyParam(roleKey);
       if (paramError) {
         return res.status(400).json({ error: paramError });
       }
@@ -392,48 +339,46 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       }
 
       /**
-       * Re-parenting is its own operation — the client sends `parentRole` alone,
-       * never alongside a rename/description change (the Access UI keeps them
-       * separate). Handle it here and return before the rename path.
+       * Re-parenting is its own operation — the client sends `parentRole` alone
+       * (a `roleKey` or `null`), never alongside a rename/description change.
+       * Handle it here and return before the rename path. `setRoleParent` throws
+       * `RoleConflictError` for a cycle, a cross-branch move, or a sibling-name
+       * clash, and a plain `Error` for a missing/system parent — all map to 400.
        */
       if (body.parentRole !== undefined) {
-        if (isSystemRoleName(name)) {
+        if (isSystemRoleName(roleKey)) {
           return res.status(400).json({ error: 'Cannot re-parent a system role' });
         }
         try {
-          const role = await setRoleParent(name, body.parentRole);
+          const role = await setRoleParent(roleKey, body.parentRole);
           return res.status(200).json({ role });
         } catch (error) {
           if (error instanceof RoleConflictError) {
             return res.status(400).json({ error: error.message });
           }
-          if (error instanceof Error && /does not exist|system role/.test(error.message)) {
+          if (
+            error instanceof Error &&
+            /does not exist|system role|different branch|not found/.test(error.message)
+          ) {
             return res.status(400).json({ error: error.message });
           }
           throw error;
         }
       }
 
-      const trimmedName = body.name?.trim() ?? '';
-      const isRename = trimmedName !== '' && trimmedName !== name;
-
-      if (isRename && isSystemRoleName(name)) {
-        return res.status(403).json({ error: 'Cannot rename system role' });
-      }
-      if (isRename && isSystemRoleName(trimmedName)) {
-        return res.status(403).json({ error: 'Cannot use a reserved system role name' });
-      }
-
-      const existing = await getRoleByName(name);
+      const existing = await getRoleByName(roleKey);
       if (!existing) {
         return res.status(404).json({ error: 'Role not found' });
       }
 
-      if (isRename) {
-        const duplicate = await getRoleByName(trimmedName);
-        if (duplicate) {
-          return res.status(409).json({ error: `Role "${trimmedName}" already exists` });
-        }
+      const trimmedName = body.name?.trim() ?? '';
+      const isRename = trimmedName !== '' && trimmedName !== existing.name;
+
+      if (isRename && isSystemRoleName(existing.name)) {
+        return res.status(403).json({ error: 'Cannot rename system role' });
+      }
+      if (isRename && isSystemRoleName(trimmedName)) {
+        return res.status(403).json({ error: 'Cannot use a reserved system role name' });
       }
 
       const updates: Partial<IRole> = {};
@@ -448,17 +393,7 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(200).json({ role: existing });
       }
 
-      if (isRename) {
-        const descUpdate =
-          body.description !== undefined ? { description: body.description } : undefined;
-        const role = await renameRole(name, trimmedName, descUpdate);
-        if (!role) {
-          return res.status(404).json({ error: 'Role not found' });
-        }
-        return res.status(200).json({ role });
-      }
-
-      const role = await updateRoleByName(name, updates);
+      const role = await updateRoleByName(roleKey, updates);
       if (!role) {
         return res.status(404).json({ error: 'Role not found' });
       }
@@ -480,8 +415,8 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
    */
   async function updateRolePermissionsHandler(req: ServerRequest, res: Response) {
     try {
-      const { name } = req.params as RoleNameParams;
-      const paramError = validateNameParam(name);
+      const { roleKey } = req.params as RoleKeyParams;
+      const paramError = validateRoleKeyParam(roleKey);
       if (paramError) {
         return res.status(400).json({ error: paramError });
       }
@@ -493,13 +428,13 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(400).json({ error: 'permissions object is required' });
       }
 
-      const existing = await getRoleByName(name);
+      const existing = await getRoleByName(roleKey);
       if (!existing) {
         return res.status(404).json({ error: 'Role not found' });
       }
 
-      await updateAccessPermissions(name, permissions, existing);
-      const updated = await getRoleByName(name);
+      await updateAccessPermissions(roleKey, permissions, existing);
+      const updated = await getRoleByName(roleKey);
       if (!updated) {
         return res.status(404).json({ error: 'Role not found' });
       }
@@ -512,36 +447,40 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
 
   async function deleteRoleHandler(req: ServerRequest, res: Response) {
     try {
-      const { name } = req.params as RoleNameParams;
-      const paramError = validateNameParam(name);
+      const { roleKey } = req.params as RoleKeyParams;
+      const paramError = validateRoleKeyParam(roleKey);
       if (paramError) {
         return res.status(400).json({ error: paramError });
       }
-      if (isSystemRoleName(name)) {
+      const existing = await getRoleByName(roleKey);
+      if (!existing) {
+        return res.status(404).json({ error: 'Role not found' });
+      }
+      if (isSystemRoleName(existing.name)) {
         return res.status(403).json({ error: 'Cannot delete system role' });
       }
 
-      const childCount = await countChildRoles(name);
+      const childCount = await countChildRoles(roleKey);
       if (childCount > 0) {
         return res.status(409).json({
-          error: `Cannot delete role "${name}": it has ${childCount} child role(s). Re-parent or delete them first.`,
+          error: `Cannot delete role "${existing.name}": it has ${childCount} child role(s). Re-parent or delete them first.`,
         });
       }
 
-      const deleted = await deleteRoleByName(name);
+      const deleted = await deleteRoleByName(roleKey);
       if (!deleted) {
         return res.status(404).json({ error: 'Role not found' });
       }
 
       const tenantId = req.user?.tenantId;
       const [configResult, aclResult, grantsResult] = await Promise.allSettled([
-        deleteConfig(PrincipalType.ROLE, name),
-        deleteAclEntries({ principalType: PrincipalType.ROLE, principalId: name }),
-        deleteGrantsForPrincipal(PrincipalType.ROLE, name, { tenantId }),
+        deleteConfig(PrincipalType.ROLE, roleKey),
+        deleteAclEntries({ principalType: PrincipalType.ROLE, principalId: roleKey }),
+        deleteGrantsForPrincipal(PrincipalType.ROLE, roleKey, { tenantId }),
       ]);
       for (const result of [configResult, aclResult, grantsResult]) {
         if (result.status === 'rejected') {
-          logger.error('[adminRoles] cascade cleanup failed for role:', name, result.reason);
+          logger.error('[adminRoles] cascade cleanup failed for role:', roleKey, result.reason);
         }
       }
       if (aclResult.status === 'fulfilled') {
@@ -549,7 +488,7 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         await invalidatePromptGroupAccessContext?.();
       }
       if (grantsResult.status === 'fulfilled') {
-        await emitGrantRemovals(req, name, grantsResult.value);
+        await emitGrantRemovals(req, roleKey, existing.name, grantsResult.value);
       }
 
       return res.status(200).json({ success: true });
@@ -564,12 +503,12 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
 
   async function getRoleMembersHandler(req: ServerRequest, res: Response) {
     try {
-      const { name } = req.params as RoleNameParams;
-      const paramError = validateNameParam(name);
+      const { roleKey } = req.params as RoleKeyParams;
+      const paramError = validateRoleKeyParam(roleKey);
       if (paramError) {
         return res.status(400).json({ error: paramError });
       }
-      const existing = await getRoleByName(name);
+      const existing = await getRoleByName(roleKey);
       if (!existing) {
         return res.status(404).json({ error: 'Role not found' });
       }
@@ -577,8 +516,8 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       const { limit, offset } = parsePagination(req.query);
 
       const [users, total] = await Promise.all([
-        listUsersByRole(name, { limit, offset }),
-        countUsersByRole(name),
+        listUsersByRole(roleKey, { limit, offset }),
+        countUsersByRole(roleKey),
       ]);
       const members: AdminMember[] = users.map((u) => ({
         userId: u._id?.toString() ?? '',
@@ -595,8 +534,8 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
 
   async function addRoleMemberHandler(req: ServerRequest, res: Response) {
     try {
-      const { name } = req.params as RoleNameParams;
-      const paramError = validateNameParam(name);
+      const { roleKey } = req.params as RoleKeyParams;
+      const paramError = validateRoleKeyParam(roleKey);
       if (paramError) {
         return res.status(400).json({ error: paramError });
       }
@@ -609,11 +548,11 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(400).json({ error: 'Invalid user ID format' });
       }
 
-      if (isSystemRoleName(name) && name !== SystemRoles.ADMIN) {
+      if (isSystemRoleName(roleKey) && roleKey !== SystemRoles.ADMIN) {
         return res.status(403).json({ error: 'Cannot directly assign members to a system role' });
       }
 
-      const existing = await getRoleByName(name);
+      const existing = await getRoleByName(roleKey);
       if (!existing) {
         return res.status(404).json({ error: 'Role not found' });
       }
@@ -623,23 +562,23 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      if (user.role === name) {
+      if (user.role === roleKey) {
         return res.status(200).json({ success: true });
       }
 
-      if (user.role === SystemRoles.ADMIN && name !== SystemRoles.ADMIN) {
+      if (user.role === SystemRoles.ADMIN && roleKey !== SystemRoles.ADMIN) {
         const adminCount = await countUsersByRole(SystemRoles.ADMIN);
         if (adminCount <= 1) {
           return res.status(400).json({ error: 'Cannot remove the last admin user' });
         }
       }
 
-      const updated = await updateUser(userId, { role: name });
+      const updated = await updateUser(userId, { role: roleKey });
       if (!updated) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      if (user.role === SystemRoles.ADMIN && name !== SystemRoles.ADMIN) {
+      if (user.role === SystemRoles.ADMIN && roleKey !== SystemRoles.ADMIN) {
         const postCount = await countUsersByRole(SystemRoles.ADMIN);
         if (postCount === 0) {
           try {
@@ -663,8 +602,8 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
 
   async function removeRoleMemberHandler(req: ServerRequest, res: Response) {
     try {
-      const { name, userId } = req.params as RoleMemberParams;
-      const paramError = validateNameParam(name);
+      const { roleKey, userId } = req.params as RoleMemberParams;
+      const paramError = validateRoleKeyParam(roleKey);
       if (paramError) {
         return res.status(400).json({ error: paramError });
       }
@@ -672,11 +611,11 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(400).json({ error: 'Invalid user ID format' });
       }
 
-      if (isSystemRoleName(name) && name !== SystemRoles.ADMIN) {
+      if (isSystemRoleName(roleKey) && roleKey !== SystemRoles.ADMIN) {
         return res.status(403).json({ error: 'Cannot remove members from a system role' });
       }
 
-      const existing = await getRoleByName(name);
+      const existing = await getRoleByName(roleKey);
       if (!existing) {
         return res.status(404).json({ error: 'Role not found' });
       }
@@ -686,11 +625,11 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      if (user.role !== name) {
+      if (user.role !== roleKey) {
         return res.status(400).json({ error: 'User is not a member of this role' });
       }
 
-      if (name === SystemRoles.ADMIN) {
+      if (roleKey === SystemRoles.ADMIN) {
         const adminCount = await countUsersByRole(SystemRoles.ADMIN);
         if (adminCount <= 1) {
           return res.status(400).json({ error: 'Cannot remove the last admin user' });
@@ -702,7 +641,7 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      if (name === SystemRoles.ADMIN) {
+      if (roleKey === SystemRoles.ADMIN) {
         const postCount = await countUsersByRole(SystemRoles.ADMIN);
         if (postCount === 0) {
           try {

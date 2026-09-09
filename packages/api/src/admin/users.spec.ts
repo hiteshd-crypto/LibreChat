@@ -155,14 +155,14 @@ describe('createAdminUsersHandlers', () => {
       expect(json).toHaveBeenCalledWith({ error: 'Failed to list users' });
     });
 
-    it('filters by viewableRoleNames when req.hierarchyScope is set', async () => {
+    it('filters by viewableRoleKeys when req.hierarchyScope is set', async () => {
       const findUsers = jest.fn().mockResolvedValue([]);
       const countUsers = jest.fn().mockResolvedValue(0);
       const deps = createDeps({ findUsers, countUsers });
       const handlers = createAdminUsersHandlers(deps);
       const { req, res } = createReqRes();
       (req as unknown as { hierarchyScope: unknown }).hierarchyScope = {
-        viewableRoleNames: ['SALES_EMPLOYEE'],
+        viewableRoleKeys: ['SALES_EMPLOYEE'],
       };
 
       await handlers.listUsers(req, res);
@@ -376,7 +376,7 @@ describe('createAdminUsersHandlers', () => {
       const handlers = createAdminUsersHandlers(deps);
       const { req, res } = createReqRes({ query: { q: 'ali' } });
       (req as unknown as { hierarchyScope: unknown }).hierarchyScope = {
-        viewableRoleNames: ['SALES_EMPLOYEE'],
+        viewableRoleKeys: ['SALES_EMPLOYEE'],
       };
 
       await handlers.searchUsers(req, res);

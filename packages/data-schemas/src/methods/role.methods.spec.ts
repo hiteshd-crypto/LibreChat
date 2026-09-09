@@ -85,6 +85,32 @@ beforeEach(async () => {
   delete process.env.AUTH_USER_CACHE_MODE;
 });
 
+describe('roleKey', () => {
+  it('mints roleKey = name for a system role and = _id for a custom role', async () => {
+    await initializeRoles();
+    const admin = await Role.findOne({ name: SystemRoles.ADMIN }).lean();
+    expect(admin?.roleKey).toBe(SystemRoles.ADMIN);
+
+    const custom = await createRoleByName({ name: 'ROLEKEY_CUSTOM' });
+    const stored = await Role.findOne({ name: 'ROLEKEY_CUSTOM' }).lean();
+    expect(stored?.roleKey).toBe(String(stored?._id));
+    expect(custom.roleKey).toBe(String(custom._id));
+  });
+
+  it('getRoleByName resolves a custom role by its roleKey, not its name', async () => {
+    const created = await createRoleByName({ name: 'RESOLVE_BY_KEY' });
+    const byKey = await getRoleByName(created.roleKey);
+    expect(byKey?.name).toBe('RESOLVE_BY_KEY');
+    const byName = await getRoleByName('RESOLVE_BY_KEY');
+    expect(byName).toBeNull();
+  });
+
+  it('getRoleByName still resolves ADMIN/USER by their sentinel key', async () => {
+    await initializeRoles();
+    expect((await getRoleByName(SystemRoles.ADMIN))?.name).toBe(SystemRoles.ADMIN);
+  });
+});
+
 describe('findRolesByNames', () => {
   it('queries storage without reading or writing the role cache', async () => {
     await Role.create([
@@ -815,13 +841,13 @@ describe('initializeRoles - SHARE permission preservation', () => {
 });
 
 describe('createRoleByName', () => {
-  it('creates a custom role and caches it', async () => {
+  it('creates a custom role and caches it under its roleKey', async () => {
     const role = await createRoleByName({ name: 'editor', description: 'Can edit' });
 
     expect(role.name).toBe('editor');
     expect(role.description).toBe('Can edit');
     expect(mockCache.set).toHaveBeenCalledWith(
-      'editor',
+      role.roleKey,
       expect.objectContaining({ name: 'editor' }),
     );
 
@@ -856,10 +882,24 @@ describe('createRoleByName', () => {
     );
   });
 
-  it('throws when role already exists', async () => {
+  it('rejects a duplicate top-level name', async () => {
     await createRoleByName({ name: 'editor' });
-
     await expect(createRoleByName({ name: 'editor' })).rejects.toThrow(/already exists/);
+  });
+
+  it('rejects a duplicate direct sibling name', async () => {
+    const branch = await createRoleByName({ name: 'BRANCH_SIB' });
+    await createRoleByName({ name: 'SIB', parentRole: branch.roleKey });
+    await expect(createRoleByName({ name: 'SIB', parentRole: branch.roleKey })).rejects.toThrow(
+      RoleConflictError,
+    );
+  });
+
+  it('allows the same child name under different parents', async () => {
+    const a = await createRoleByName({ name: 'BRANCH_A' });
+    const b = await createRoleByName({ name: 'BRANCH_B' });
+    await createRoleByName({ name: 'DUPE', parentRole: a.roleKey });
+    await expect(createRoleByName({ name: 'DUPE', parentRole: b.roleKey })).resolves.toBeDefined();
   });
 
   it('defaults a newly created role to a null parent and depth 0', async () => {
@@ -869,20 +909,21 @@ describe('createRoleByName', () => {
     expect(stored?.depth).toBe(0);
   });
 
-  it('computes depth from the parent when parentRole is given', async () => {
-    await createRoleByName({ name: 'TREE_PARENT' });
-    const child = await createRoleByName({ name: 'TREE_CHILD', parentRole: 'TREE_PARENT' });
-    expect(child.parentRole).toBe('TREE_PARENT');
+  it('computes depth from the parent when parentRole (a key) is given', async () => {
+    const parent = await createRoleByName({ name: 'TREE_PARENT' });
+    const child = await createRoleByName({ name: 'TREE_CHILD', parentRole: parent.roleKey });
+    expect(child.parentRole).toBe(parent.roleKey);
     expect(child.depth).toBe(1);
   });
 
   it('rejects a nonexistent parent', async () => {
     await expect(
-      createRoleByName({ name: 'ORPHAN', parentRole: 'DOES_NOT_EXIST' }),
+      createRoleByName({ name: 'ORPHAN', parentRole: 'does-not-exist-key' }),
     ).rejects.toThrow(/does not exist/);
   });
 
   it('rejects a system role as the parent', async () => {
+    await initializeRoles();
     await expect(
       createRoleByName({ name: 'BAD_CHILD', parentRole: SystemRoles.USER }),
     ).rejects.toThrow(/system role/);
@@ -891,14 +932,14 @@ describe('createRoleByName', () => {
 
 describe('deleteRoleByName', () => {
   it('deletes a custom role and reassigns users to USER', async () => {
-    await createRoleByName({ name: 'editor' });
+    const editor = await createRoleByName({ name: 'editor' });
     await User.create([
-      { name: 'Alice', email: 'alice@test.com', role: 'editor', username: 'alice' },
-      { name: 'Bob', email: 'bob@test.com', role: 'editor', username: 'bob' },
+      { name: 'Alice', email: 'alice@test.com', role: editor.roleKey, username: 'alice' },
+      { name: 'Bob', email: 'bob@test.com', role: editor.roleKey, username: 'bob' },
       { name: 'Carol', email: 'carol@test.com', role: SystemRoles.USER, username: 'carol' },
     ]);
 
-    const deleted = await deleteRoleByName('editor');
+    const deleted = await deleteRoleByName(editor.roleKey);
 
     expect(deleted).toBeTruthy();
     expect(deleted!.name).toBe('editor');
@@ -912,50 +953,51 @@ describe('deleteRoleByName', () => {
   });
 
   it('returns null when role does not exist', async () => {
-    const result = await deleteRoleByName('nonexistent');
+    const result = await deleteRoleByName('nonexistent-key');
     expect(result).toBeNull();
   });
 
   it('throws for system roles', async () => {
+    await initializeRoles();
     await expect(deleteRoleByName(SystemRoles.ADMIN)).rejects.toThrow(/Cannot delete system role/);
     await expect(deleteRoleByName(SystemRoles.USER)).rejects.toThrow(/Cannot delete system role/);
   });
 
   it('refuses to delete a role that has children', async () => {
-    await createRoleByName({ name: 'DELETE_PARENT' });
-    await createRoleByName({ name: 'DELETE_CHILD', parentRole: 'DELETE_PARENT' });
-    await expect(deleteRoleByName('DELETE_PARENT')).rejects.toThrow(RoleConflictError);
+    const parent = await createRoleByName({ name: 'DELETE_PARENT' });
+    await createRoleByName({ name: 'DELETE_CHILD', parentRole: parent.roleKey });
+    await expect(deleteRoleByName(parent.roleKey)).rejects.toThrow(RoleConflictError);
   });
 
   it('deletes a childless role as before', async () => {
-    await createRoleByName({ name: 'DELETE_LEAF' });
-    await expect(deleteRoleByName('DELETE_LEAF')).resolves.not.toBeNull();
+    const leaf = await createRoleByName({ name: 'DELETE_LEAF' });
+    await expect(deleteRoleByName(leaf.roleKey)).resolves.not.toBeNull();
   });
 
   it('sets cache entry to null after deletion', async () => {
-    await createRoleByName({ name: 'editor' });
+    const editor = await createRoleByName({ name: 'editor' });
     mockCache.set.mockClear();
 
-    await deleteRoleByName('editor');
+    await deleteRoleByName(editor.roleKey);
 
-    expect(mockCache.set).toHaveBeenCalledWith('editor', null);
+    expect(mockCache.set).toHaveBeenCalledWith(editor.roleKey, null);
   });
 
-  it('returns null and invalidates cache when role does not exist', async () => {
+  it('returns null without a cache write when the role does not exist', async () => {
     mockCache.set.mockClear();
 
-    const result = await deleteRoleByName('nonexistent');
+    const result = await deleteRoleByName('nonexistent-key');
 
     expect(result).toBeNull();
-    expect(mockCache.set).toHaveBeenCalledWith('nonexistent', null);
+    expect(mockCache.set).not.toHaveBeenCalledWith('nonexistent-key', null);
   });
 
   it('invalidates cached auth user documents for reassigned users', async () => {
     process.env.AUTH_USER_CACHE_MODE = 'on';
-    await createRoleByName({ name: 'editor' });
+    const editor = await createRoleByName({ name: 'editor' });
     const [alice, bob] = await User.create([
-      { name: 'Alice', email: 'alice@test.com', role: 'editor', username: 'alice' },
-      { name: 'Bob', email: 'bob@test.com', role: 'editor', username: 'bob' },
+      { name: 'Alice', email: 'alice@test.com', role: editor.roleKey, username: 'alice' },
+      { name: 'Bob', email: 'bob@test.com', role: editor.roleKey, username: 'bob' },
     ]);
     mockCache.get.mockImplementation((key: string) => {
       if (key === `${AUTH_USER_DOC_BY_ID_PREFIX}:${alice._id.toString()}`) {
@@ -967,7 +1009,7 @@ describe('deleteRoleByName', () => {
       return Promise.resolve(undefined);
     });
 
-    await deleteRoleByName('editor');
+    await deleteRoleByName(editor.roleKey);
 
     expect(mockGetCache).toHaveBeenCalledWith(CacheKeys.AUTH_USER_DOC);
     expect(mockCache.delete).toHaveBeenCalledWith('auth-cache-alice');
@@ -981,55 +1023,52 @@ describe('deleteRoleByName', () => {
   });
 });
 
-describe('updateRoleByName - cache on rename', () => {
-  it('invalidates old key and populates new key on rename', async () => {
-    await createRoleByName({ name: 'editor', description: 'Can edit' });
+describe('updateRoleByName', () => {
+  it('renames in a single write, keyed by the stable roleKey', async () => {
+    const editor = await createRoleByName({ name: 'editor', description: 'Can edit' });
     mockCache.set.mockClear();
 
-    const updated = await updateRoleByName('editor', { name: 'senior-editor' });
+    const updated = await updateRoleByName(editor.roleKey, { name: 'senior-editor' });
 
     expect(updated.name).toBe('senior-editor');
-    expect(mockCache.set).toHaveBeenCalledWith('editor', null);
+    expect(updated.roleKey).toBe(editor.roleKey);
     expect(mockCache.set).toHaveBeenCalledWith(
-      'senior-editor',
+      editor.roleKey,
       expect.objectContaining({ name: 'senior-editor' }),
     );
   });
 
-  it('writes same key when name unchanged', async () => {
-    await createRoleByName({ name: 'editor' });
+  it('writes the same key when the name is unchanged', async () => {
+    const editor = await createRoleByName({ name: 'editor' });
     mockCache.set.mockClear();
 
-    await updateRoleByName('editor', { description: 'Updated desc' });
+    await updateRoleByName(editor.roleKey, { description: 'Updated desc' });
 
     expect(mockCache.set).toHaveBeenCalledWith(
-      'editor',
+      editor.roleKey,
       expect.objectContaining({ name: 'editor', description: 'Updated desc' }),
     );
     expect(mockCache.set).toHaveBeenCalledTimes(1);
   });
 
-  it('repoints every child reference on rename', async () => {
-    await createRoleByName({ name: 'RENAME_OLD' });
-    await createRoleByName({ name: 'RENAME_CHILD_A', parentRole: 'RENAME_OLD' });
-    await createRoleByName({ name: 'RENAME_CHILD_B', parentRole: 'RENAME_OLD' });
+  it('does not touch children on rename (they reference the key)', async () => {
+    const parent = await createRoleByName({ name: 'RENAME_OLD' });
+    const a = await createRoleByName({ name: 'RENAME_CHILD_A', parentRole: parent.roleKey });
+    const b = await createRoleByName({ name: 'RENAME_CHILD_B', parentRole: parent.roleKey });
 
-    await updateRoleByName('RENAME_OLD', { name: 'RENAME_NEW' });
+    await updateRoleByName(parent.roleKey, { name: 'RENAME_NEW' });
 
-    const a = await Role.findOne({ name: 'RENAME_CHILD_A' }).lean();
-    const b = await Role.findOne({ name: 'RENAME_CHILD_B' }).lean();
-    expect(a?.parentRole).toBe('RENAME_NEW');
-    expect(b?.parentRole).toBe('RENAME_NEW');
+    const storedA = await Role.findOne({ roleKey: a.roleKey }).lean();
+    const storedB = await Role.findOne({ roleKey: b.roleKey }).lean();
+    expect(storedA?.parentRole).toBe(parent.roleKey);
+    expect(storedB?.parentRole).toBe(parent.roleKey);
   });
 
-  it('leaves children untouched on a description-only update', async () => {
-    await createRoleByName({ name: 'DESC_ONLY' });
-    await createRoleByName({ name: 'DESC_ONLY_CHILD', parentRole: 'DESC_ONLY' });
-
-    await updateRoleByName('DESC_ONLY', { description: 'changed' });
-
-    const child = await Role.findOne({ name: 'DESC_ONLY_CHILD' }).lean();
-    expect(child?.parentRole).toBe('DESC_ONLY');
+  it('rejects renaming a role onto a direct sibling name', async () => {
+    const parent = await createRoleByName({ name: 'BRANCH_D' });
+    const x = await createRoleByName({ name: 'XX', parentRole: parent.roleKey });
+    await createRoleByName({ name: 'YY', parentRole: parent.roleKey });
+    await expect(updateRoleByName(x.roleKey, { name: 'YY' })).rejects.toThrow(RoleConflictError);
   });
 });
 
@@ -1259,14 +1298,14 @@ describe('listRoles', () => {
       description: 'Can edit',
       permissions: { PROMPTS: { USE: true } },
     });
-    await createRoleByName({ name: 'editor-lead' });
-    await createRoleByName({ name: 'editor-junior', parentRole: 'editor-lead' });
+    const lead = await createRoleByName({ name: 'editor-lead' });
+    await createRoleByName({ name: 'editor-junior', parentRole: lead.roleKey });
 
     const roles = await listRoles();
     const junior = roles.find((r) => r.name === 'editor-junior');
 
     expect(roles.find((r) => r.name === 'editor')?.description).toBe('Can edit');
-    expect(junior?.parentRole).toBe('editor-lead');
+    expect(junior?.parentRole).toBe(lead.roleKey);
     expect(junior?.depth).toBe(1);
     expect(roles[0]._id).toBeDefined();
     expect('permissions' in roles[0]).toBe(false);

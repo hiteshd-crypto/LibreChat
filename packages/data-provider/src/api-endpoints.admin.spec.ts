@@ -2,8 +2,11 @@ import * as endpoints from './api-endpoints';
 
 /** BASE_URL is '' in the node/jest context, so paths carry no host prefix. */
 describe('admin endpoint builders', () => {
-  it('builds role paths with encoding', () => {
+  it('builds role paths with encoding, addressed by roleKey', () => {
     expect(endpoints.adminRole('ADMIN')).toBe('/api/admin/roles/ADMIN');
+    expect(endpoints.adminRole('6a9e5db352b2842e907dc5f0')).toBe(
+      '/api/admin/roles/6a9e5db352b2842e907dc5f0',
+    );
     expect(endpoints.adminRoleMembers('A B')).toBe('/api/admin/roles/A%20B/members');
     expect(endpoints.adminRoleMembers('ADMIN', { limit: 20, offset: 40 })).toBe(
       '/api/admin/roles/ADMIN/members?limit=20&offset=40',

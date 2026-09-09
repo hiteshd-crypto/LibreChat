@@ -1,12 +1,13 @@
+import { DndProvider } from 'react-dnd';
 import userEvent from '@testing-library/user-event';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import AccessView from '../AccessView';
 
 const mockUseAdminRoles = jest.fn();
-const mockUpdateMutate = jest.fn();
-const mockDeleteMutate = jest.fn();
 
-const idleMutation = (mutate: jest.Mock) => ({
+const idleMutation = (mutate = jest.fn()) => ({
   mutate,
   mutateAsync: mutate,
   reset: jest.fn(),
@@ -16,14 +17,14 @@ const idleMutation = (mutate: jest.Mock) => ({
 
 jest.mock('~/data-provider', () => ({
   useAdminRoles: () => mockUseAdminRoles(),
-  useUpdateRole: () => idleMutation(mockUpdateMutate),
-  useDeleteRole: () => idleMutation(mockDeleteMutate),
-  useCreateRole: () => idleMutation(jest.fn()),
-  useSetRoleParent: () => idleMutation(jest.fn()),
+  useUpdateRole: () => idleMutation(),
+  useDeleteRole: () => idleMutation(),
+  useCreateRole: () => idleMutation(),
+  useSetRoleParent: () => idleMutation(),
   useAdminRoleMembers: () => ({ data: { members: [], total: 0 }, isLoading: false }),
   useAdminUserSearch: () => ({ data: { users: [] } }),
-  useAddRoleMember: () => idleMutation(jest.fn()),
-  useRemoveRoleMember: () => idleMutation(jest.fn()),
+  useAddRoleMember: () => idleMutation(),
+  useRemoveRoleMember: () => idleMutation(),
 }));
 
 jest.mock('~/hooks', () => ({
@@ -50,72 +51,88 @@ jest.mock('@librechat/client', () => ({
   ),
 }));
 
+const withDnd = (ui: ReactElement) =>
+  render(<DndProvider backend={HTML5Backend}>{ui}</DndProvider>);
+
+const r = (name: string, depth = 0, parentRole: string | null = null) => ({
+  roleKey: `${name}-key`,
+  name,
+  depth,
+  parentRole,
+});
+
 beforeEach(() => jest.clearAllMocks());
 
 describe('AccessView', () => {
-  it('renders roles with a System badge for ADMIN/USER', () => {
+  it('renders roles with a System badge for ADMIN/USER and action buttons per role type', () => {
     mockUseAdminRoles.mockReturnValue({
-      data: { roles: [{ name: 'ADMIN' }, { name: 'USER' }, { name: 'support' }], total: 3 },
+      data: { roles: [r('ADMIN'), r('USER'), r('support')], total: 3 },
       isLoading: false,
       isError: false,
     });
-    render(<AccessView />);
+    withDnd(<AccessView />);
     expect(screen.getByText('ADMIN')).toBeInTheDocument();
     expect(screen.getByText('support')).toBeInTheDocument();
     expect(screen.getAllByText('com_admin_access_system_badge')).toHaveLength(2);
+    // ADMIN/USER get Edit only; a top-level custom role gets Add + Edit (no move handle).
+    expect(screen.getAllByLabelText('com_admin_role_action_edit')).toHaveLength(3);
+    expect(screen.getAllByLabelText('com_admin_role_action_add')).toHaveLength(1);
+    expect(screen.queryByLabelText('com_admin_role_action_move')).not.toBeInTheDocument();
+  });
+
+  it('gives a nested custom role a move handle', () => {
+    mockUseAdminRoles.mockReturnValue({
+      data: { roles: [r('SUP'), r('MGR', 1, 'SUP-key')], total: 2 },
+      isLoading: false,
+      isError: false,
+    });
+    withDnd(<AccessView />);
+    expect(screen.getAllByLabelText('com_admin_role_action_move')).toHaveLength(1);
   });
 
   it('shows a spinner while loading', () => {
     mockUseAdminRoles.mockReturnValue({ isLoading: true });
-    render(<AccessView />);
+    withDnd(<AccessView />);
     expect(screen.getByTestId('admin-roles-loading')).toBeInTheDocument();
   });
 
   it('shows an error state', () => {
     mockUseAdminRoles.mockReturnValue({ isLoading: false, isError: true });
-    render(<AccessView />);
+    withDnd(<AccessView />);
     expect(screen.getByText('com_admin_access_load_error')).toBeInTheDocument();
   });
 
   it('renders a create-role button that opens the dialog', async () => {
     mockUseAdminRoles.mockReturnValue({
-      data: { roles: [{ name: 'ADMIN' }], total: 1 },
+      data: { roles: [r('ADMIN')], total: 1 },
       isLoading: false,
       isError: false,
     });
-    render(<AccessView />);
+    withDnd(<AccessView />);
     const openButtons = screen.getAllByText('com_admin_access_create_title');
-    // The trigger button; the dialog is closed so its title is not yet shown.
     expect(openButtons).toHaveLength(1);
     await userEvent.click(openButtons[0]);
-    // Dialog now open — the template renders the same key as its title.
     expect(screen.getAllByText('com_admin_access_create_title').length).toBeGreaterThan(1);
   });
 
   it('indents child roles by depth', () => {
     mockUseAdminRoles.mockReturnValue({
-      data: {
-        roles: [
-          { name: 'SUPERVISOR', depth: 0 },
-          { name: 'SALES_MANAGER', depth: 1, parentRole: 'SUPERVISOR' },
-        ],
-        total: 2,
-      },
+      data: { roles: [r('SUPERVISOR'), r('SALES_MANAGER', 1, 'SUPERVISOR-key')], total: 2 },
       isLoading: false,
       isError: false,
     });
-    render(<AccessView />);
+    withDnd(<AccessView />);
     const child = screen.getByText('SALES_MANAGER').closest('div[style]') as HTMLElement;
     expect(child).toHaveStyle({ marginLeft: '1.25rem' });
   });
 
   it('filters roles by the search box', async () => {
     mockUseAdminRoles.mockReturnValue({
-      data: { roles: [{ name: 'ADMIN' }, { name: 'support' }], total: 2 },
+      data: { roles: [r('ADMIN'), r('support')], total: 2 },
       isLoading: false,
       isError: false,
     });
-    render(<AccessView />);
+    withDnd(<AccessView />);
     await userEvent.type(screen.getByPlaceholderText('com_admin_access_search_placeholder'), 'sup');
     expect(screen.queryByText('ADMIN')).not.toBeInTheDocument();
     expect(screen.getByText('support')).toBeInTheDocument();

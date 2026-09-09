@@ -1,7 +1,12 @@
 import type { TAdminRole } from 'librechat-data-provider';
 import { orderRolesByTree } from '../roleTree';
 
-const r = (name: string, parentRole: string | null = null): TAdminRole => ({ name, parentRole });
+/** Fixtures use the name as the roleKey so `parentRole` references stay readable. */
+const r = (name: string, parentRole: string | null = null): TAdminRole => ({
+  roleKey: name,
+  name,
+  parentRole,
+});
 
 describe('orderRolesByTree', () => {
   it('orders each subtree directly under its parent, siblings by name', () => {
@@ -33,8 +38,8 @@ describe('orderRolesByTree', () => {
 
   it('computes depth from the visible tree, not the stored depth field', () => {
     const roles: TAdminRole[] = [
-      { name: 'A', parentRole: null, depth: 0 },
-      { name: 'B', parentRole: 'A', depth: 5 },
+      { roleKey: 'A', name: 'A', parentRole: null, depth: 0 },
+      { roleKey: 'B', name: 'B', parentRole: 'A', depth: 5 },
     ];
     expect(orderRolesByTree(roles).map((o) => o.depth)).toEqual([0, 1]);
   });

@@ -1,6 +1,8 @@
 import { Schema } from 'mongoose';
-import { PermissionTypes, Permissions } from 'librechat-data-provider';
+import { PermissionTypes, Permissions, SystemRoles } from 'librechat-data-provider';
 import type { IRole } from '~/types';
+
+const SYSTEM_ROLE_NAMES = new Set<string>(Object.values(SystemRoles));
 
 /**
  * Uses a sub-schema for permissions. Notice we disable `_id` for this subdocument.
@@ -89,6 +91,7 @@ const rolePermissionsSchema = new Schema(
 
 const roleSchema: Schema<IRole> = new Schema({
   name: { type: String, required: true, index: true },
+  roleKey: { type: String, required: true, index: true },
   description: { type: String, default: '' },
   permissions: {
     type: rolePermissionsSchema,
@@ -108,6 +111,15 @@ const roleSchema: Schema<IRole> = new Schema({
   },
 });
 
-roleSchema.index({ name: 1, tenantId: 1 }, { unique: true });
+roleSchema.pre('validate', function (next) {
+  if (!this.roleKey) {
+    const upper = (this.name ?? '').toUpperCase();
+    this.roleKey = SYSTEM_ROLE_NAMES.has(upper) ? upper : String(this._id);
+  }
+  next();
+});
+
+roleSchema.index({ roleKey: 1, tenantId: 1 }, { unique: true });
+roleSchema.index({ parentRole: 1, name: 1, tenantId: 1 }, { unique: true });
 
 export default roleSchema;

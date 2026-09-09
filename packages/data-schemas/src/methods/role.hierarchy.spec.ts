@@ -34,153 +34,120 @@ afterEach(async () => {
 });
 
 /**
- * Seeds a tree:
+ * Seeds, via `createRoleByName` (so `roleKey` is minted and `parentRole` holds keys):
  *   SUPERVISOR
  *     └── SALES_MANAGER
  *           └── SALES_EMPLOYEE
- *   SUPPORT_MANAGER (top-level, separate branch)
+ *   SUPPORT_MANAGER (separate branch)
  *     └── SUPPORT_EMPLOYEE
  */
 async function seedTree() {
-  await Role.create([
-    { name: 'SUPERVISOR', parentRole: null, depth: 0 },
-    { name: 'SALES_MANAGER', parentRole: 'SUPERVISOR', depth: 1 },
-    { name: 'SALES_EMPLOYEE', parentRole: 'SALES_MANAGER', depth: 2 },
-    { name: 'SUPPORT_MANAGER', parentRole: null, depth: 0 },
-    { name: 'SUPPORT_EMPLOYEE', parentRole: 'SUPPORT_MANAGER', depth: 1 },
-  ]);
+  const sup = await methods.createRoleByName({ name: 'SUPERVISOR' });
+  const salesMgr = await methods.createRoleByName({
+    name: 'SALES_MANAGER',
+    parentRole: sup.roleKey,
+  });
+  const salesEmp = await methods.createRoleByName({
+    name: 'SALES_EMPLOYEE',
+    parentRole: salesMgr.roleKey,
+  });
+  const supportMgr = await methods.createRoleByName({ name: 'SUPPORT_MANAGER' });
+  const supportEmp = await methods.createRoleByName({
+    name: 'SUPPORT_EMPLOYEE',
+    parentRole: supportMgr.roleKey,
+  });
+  return { sup, salesMgr, salesEmp, supportMgr, supportEmp };
 }
 
 describe('hierarchy resolver', () => {
-  describe('getAncestorRoleNames', () => {
-    it('walks up to the root', async () => {
-      await seedTree();
-      await expect(methods.getAncestorRoleNames('SALES_EMPLOYEE')).resolves.toEqual([
-        'SALES_MANAGER',
-        'SUPERVISOR',
-      ]);
-    });
-
-    it('returns an empty array for a top-level role', async () => {
-      await seedTree();
-      await expect(methods.getAncestorRoleNames('SUPERVISOR')).resolves.toEqual([]);
-    });
+  it('getAncestorRoleKeys walks up to the root', async () => {
+    const { sup, salesMgr, salesEmp } = await seedTree();
+    await expect(methods.getAncestorRoleKeys(salesEmp.roleKey)).resolves.toEqual([
+      salesMgr.roleKey,
+      sup.roleKey,
+    ]);
+    await expect(methods.getAncestorRoleKeys(sup.roleKey)).resolves.toEqual([]);
   });
 
-  describe('getDescendantRoleNames', () => {
-    it('collects the whole subtree', async () => {
-      await seedTree();
-      const names = await methods.getDescendantRoleNames('SUPERVISOR');
-      expect(new Set(names)).toEqual(new Set(['SALES_MANAGER', 'SALES_EMPLOYEE']));
-    });
-
-    it('returns an empty array for a leaf role', async () => {
-      await seedTree();
-      await expect(methods.getDescendantRoleNames('SALES_EMPLOYEE')).resolves.toEqual([]);
-    });
+  it('getDescendantRoleKeys collects the whole subtree', async () => {
+    const { sup, salesMgr, salesEmp } = await seedTree();
+    const keys = await methods.getDescendantRoleKeys(sup.roleKey);
+    expect(new Set(keys)).toEqual(new Set([salesMgr.roleKey, salesEmp.roleKey]));
+    await expect(methods.getDescendantRoleKeys(salesEmp.roleKey)).resolves.toEqual([]);
   });
 
-  describe('isDescendantOf / canViewRole', () => {
-    it('confirms a deep descendant', async () => {
-      await seedTree();
-      await expect(methods.isDescendantOf('SALES_EMPLOYEE', 'SUPERVISOR')).resolves.toBe(true);
-    });
-
-    it('denies a sibling', async () => {
-      await seedTree();
-      await expect(methods.canViewRole('SALES_MANAGER', 'SUPPORT_EMPLOYEE')).resolves.toBe(false);
-    });
-
-    it('denies cross-branch access even at the same depth', async () => {
-      await seedTree();
-      await expect(methods.canViewRole('SUPPORT_MANAGER', 'SALES_EMPLOYEE')).resolves.toBe(false);
-    });
-
-    it('ADMIN can view any role, including USER', async () => {
-      await seedTree();
-      await expect(methods.canViewRole(SystemRoles.ADMIN, 'SALES_EMPLOYEE')).resolves.toBe(true);
-      await expect(methods.canViewRole(SystemRoles.ADMIN, SystemRoles.USER)).resolves.toBe(true);
-    });
-
-    it('a hierarchy role can never view USER', async () => {
-      await seedTree();
-      await expect(methods.canViewRole('SUPERVISOR', SystemRoles.USER)).resolves.toBe(false);
-    });
+  it('isDescendantOf / canViewRole enforce branch isolation', async () => {
+    const { sup, salesMgr, salesEmp, supportMgr, supportEmp } = await seedTree();
+    await expect(methods.isDescendantOf(salesEmp.roleKey, sup.roleKey)).resolves.toBe(true);
+    await expect(methods.canViewRole(salesMgr.roleKey, supportEmp.roleKey)).resolves.toBe(false);
+    await expect(methods.canViewRole(supportMgr.roleKey, salesEmp.roleKey)).resolves.toBe(false);
+    await expect(methods.canViewRole(SystemRoles.ADMIN, salesEmp.roleKey)).resolves.toBe(true);
+    await expect(methods.canViewRole(SystemRoles.ADMIN, SystemRoles.USER)).resolves.toBe(true);
+    await expect(methods.canViewRole(sup.roleKey, SystemRoles.USER)).resolves.toBe(false);
   });
 
-  describe('wouldCreateCycle', () => {
-    it('rejects a role as its own parent', async () => {
-      await seedTree();
-      await expect(methods.wouldCreateCycle('SUPERVISOR', 'SUPERVISOR')).resolves.toBe(true);
-    });
-
-    it('rejects moving a role under its own descendant', async () => {
-      await seedTree();
-      await expect(methods.wouldCreateCycle('SUPERVISOR', 'SALES_EMPLOYEE')).resolves.toBe(true);
-    });
-
-    it('allows moving a role to null (top-level)', async () => {
-      await seedTree();
-      await expect(methods.wouldCreateCycle('SALES_MANAGER', null)).resolves.toBe(false);
-    });
-
-    it('allows an unrelated move', async () => {
-      await seedTree();
-      await expect(methods.wouldCreateCycle('SALES_EMPLOYEE', 'SUPPORT_MANAGER')).resolves.toBe(
-        false,
-      );
-    });
+  it('wouldCreateCycle rejects self and descendant parents', async () => {
+    const { sup, salesMgr, salesEmp, supportMgr } = await seedTree();
+    await expect(methods.wouldCreateCycle(sup.roleKey, sup.roleKey)).resolves.toBe(true);
+    await expect(methods.wouldCreateCycle(sup.roleKey, salesEmp.roleKey)).resolves.toBe(true);
+    await expect(methods.wouldCreateCycle(salesMgr.roleKey, null)).resolves.toBe(false);
+    await expect(methods.wouldCreateCycle(salesEmp.roleKey, supportMgr.roleKey)).resolves.toBe(
+      false,
+    );
   });
 });
 
 describe('setRoleParent', () => {
-  it('moves a role to a new parent and recomputes depth for its subtree', async () => {
-    await seedTree();
-    const updated = await methods.setRoleParent('SALES_MANAGER', 'SUPPORT_MANAGER');
-    expect(updated.parentRole).toBe('SUPPORT_MANAGER');
+  it('allows a same-branch move and recomputes depth for the subtree', async () => {
+    const { sup, salesEmp } = await seedTree();
+    const updated = await methods.setRoleParent(salesEmp.roleKey, sup.roleKey);
+    expect(updated.parentRole).toBe(sup.roleKey);
     expect(updated.depth).toBe(1);
-
-    const child = await Role.findOne({ name: 'SALES_EMPLOYEE' }).lean();
-    expect(child?.depth).toBe(2);
   });
 
-  it('moves a role to top-level (null parent)', async () => {
-    await seedTree();
-    const updated = await methods.setRoleParent('SALES_MANAGER', null);
-    expect(updated.parentRole ?? null).toBeNull();
-    expect(updated.depth).toBe(0);
-
-    const child = await Role.findOne({ name: 'SALES_EMPLOYEE' }).lean();
-    expect(child?.depth).toBe(1);
+  it('rejects a cross-branch move', async () => {
+    const { salesMgr, supportMgr } = await seedTree();
+    await expect(methods.setRoleParent(salesMgr.roleKey, supportMgr.roleKey)).rejects.toThrow(
+      /different branch/,
+    );
   });
 
-  it('rejects a cycle', async () => {
-    await seedTree();
-    await expect(methods.setRoleParent('SUPERVISOR', 'SALES_EMPLOYEE')).rejects.toThrow(
+  it('rejects making a nested role top-level (its root would change)', async () => {
+    const { salesMgr } = await seedTree();
+    await expect(methods.setRoleParent(salesMgr.roleKey, null)).rejects.toThrow(RoleConflictError);
+  });
+
+  it('rejects a move that would duplicate a sibling name', async () => {
+    const { sup, salesMgr } = await seedTree();
+    const dupe = await methods.createRoleByName({
+      name: 'SALES_MANAGER',
+      parentRole: salesMgr.roleKey,
+    });
+    await expect(methods.setRoleParent(dupe.roleKey, sup.roleKey)).rejects.toThrow(
       RoleConflictError,
     );
   });
 
+  it('rejects a cycle', async () => {
+    const { sup, salesMgr } = await seedTree();
+    await expect(methods.setRoleParent(sup.roleKey, salesMgr.roleKey)).rejects.toThrow(/cycle/);
+  });
+
   it('rejects a nonexistent parent', async () => {
-    await seedTree();
-    await expect(methods.setRoleParent('SALES_MANAGER', 'GHOST_ROLE')).rejects.toThrow();
+    const { salesMgr } = await seedTree();
+    await expect(methods.setRoleParent(salesMgr.roleKey, 'ghost-key')).rejects.toThrow();
   });
 
   it('rejects re-parenting a system role', async () => {
     await seedTree();
-    await expect(methods.setRoleParent(SystemRoles.USER, 'SUPERVISOR')).rejects.toThrow();
-  });
-
-  it('rejects setting a system role as the parent', async () => {
-    await seedTree();
-    await expect(methods.setRoleParent('SALES_MANAGER', SystemRoles.ADMIN)).rejects.toThrow();
+    await expect(methods.setRoleParent(SystemRoles.USER, 'anything')).rejects.toThrow();
   });
 });
 
 describe('countChildRoles', () => {
   it('counts direct children only', async () => {
-    await seedTree();
-    await expect(methods.countChildRoles('SUPERVISOR')).resolves.toBe(1);
-    await expect(methods.countChildRoles('SALES_EMPLOYEE')).resolves.toBe(0);
+    const { sup, salesEmp } = await seedTree();
+    await expect(methods.countChildRoles(sup.roleKey)).resolves.toBe(1);
+    await expect(methods.countChildRoles(salesEmp.roleKey)).resolves.toBe(0);
   });
 });

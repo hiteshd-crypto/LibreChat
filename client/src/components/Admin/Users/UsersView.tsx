@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Input, Spinner } from '@librechat/client';
 import type { ReactNode } from 'react';
 import type { AdminUserRow } from './UserRow';
-import { useAdminUsers, useAdminUserSearch, useMyHierarchy } from '~/data-provider';
+import { useAdminUsers, useAdminUserSearch, useMyHierarchy, useAdminRoles } from '~/data-provider';
+import { buildRoleLabels } from '../Access/roleLabels';
 import { useLocalize } from '~/hooks';
 import UserRow from './UserRow';
 
@@ -31,7 +32,11 @@ export default function UsersView() {
   const { data: hierarchy } = useMyHierarchy();
   /** Only a non-admin hierarchy viewer gets the inline role-change control;
    *  admins manage membership through the Access → Members flow. */
-  const manageableRoleNames = hierarchy?.isAdmin ? undefined : hierarchy?.manageableRoleNames;
+  const manageableRoleKeys = hierarchy?.isAdmin ? undefined : hierarchy?.manageableRoleKeys;
+  /** `/api/admin/roles` is ADMIN-only; a subordinate viewer falls back to raw keys. */
+  const { data: rolesData } = useAdminRoles({ enabled: hierarchy?.isAdmin === true });
+  const roleLabelMap = useMemo(() => buildRoleLabels(rolesData?.roles ?? []), [rolesData?.roles]);
+  const roleLabel = (roleKey: string) => roleLabelMap.get(roleKey) ?? roleKey;
 
   const rows: AdminUserRow[] = useMemo(() => {
     if (isSearching) {
@@ -94,7 +99,8 @@ export default function UsersView() {
                   user={user}
                   locale={locale}
                   onOpen={() => open(user)}
-                  manageableRoleNames={manageableRoleNames}
+                  manageableRoleKeys={manageableRoleKeys}
+                  roleLabel={roleLabel}
                 />
               ))}
             </tbody>

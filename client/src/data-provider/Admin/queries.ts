@@ -41,18 +41,18 @@ export const useMyHierarchy = (
   });
 
 export const useAdminRoleMembers = (
-  roleName: string,
+  roleKey: string,
   page: number,
   config?: UseQueryOptions<TAdminMemberListResponse>,
 ): QueryObserverResult<TAdminMemberListResponse> =>
   useQuery<TAdminMemberListResponse>(
-    [QueryKeys.adminRoleMembers, roleName, page],
+    [QueryKeys.adminRoleMembers, roleKey, page],
     () =>
-      dataService.listAdminRoleMembers(roleName, {
+      dataService.listAdminRoleMembers(roleKey, {
         limit: MEMBERS_PAGE_SIZE,
         offset: (page - 1) * MEMBERS_PAGE_SIZE,
       }),
-    { enabled: !!roleName, refetchOnWindowFocus: false, staleTime: 30_000, ...config },
+    { enabled: !!roleKey, refetchOnWindowFocus: false, staleTime: 30_000, ...config },
   );
 
 export const useAdminUsers = (

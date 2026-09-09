@@ -1,10 +1,12 @@
 import type { TConversation, TMessage } from '../schemas';
 
 export interface TAdminRole {
+  /** Immutable identifier: `"ADMIN"`/`"USER"` for system roles, the `_id` string for custom roles. Every role reference uses this. */
+  roleKey: string;
   name: string;
   description?: string;
   permissions?: Record<string, Record<string, boolean>>;
-  /** Parent role name in the hierarchy tree; `null` for a top-level branch, ADMIN, or USER. */
+  /** Parent role's `roleKey` in the hierarchy tree; `null` for a top-level branch, ADMIN, or USER. */
   parentRole?: string | null;
   /** Denormalized tree depth (0 for top-level branches, ADMIN, USER). Display only. */
   depth?: number;
@@ -14,8 +16,8 @@ export interface TAdminRole {
 export interface TMyHierarchy {
   isAdmin: boolean;
   canViewSubordinates: boolean;
-  viewableRoleNames: string[];
-  manageableRoleNames: string[];
+  viewableRoleKeys: string[];
+  manageableRoleKeys: string[];
 }
 
 export interface TAdminRoleListResponse {

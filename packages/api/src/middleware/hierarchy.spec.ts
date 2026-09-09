@@ -27,7 +27,7 @@ describe('requireSubordinateAccess', () => {
       hasCapability: jest.fn().mockResolvedValue(true),
       findUsers,
       canViewRole: jest.fn(),
-      getDescendantRoleNames: jest.fn(),
+      getDescendantRoleKeys: jest.fn(),
     });
     const { req, res, next } = makeReqRes({ id: 'admin-1', role: 'ADMIN' }, { userId: 'u1' });
 
@@ -43,7 +43,7 @@ describe('requireSubordinateAccess', () => {
       hasCapability: jest.fn(capabilityHeld(SystemCapabilities.VIEW_SUBORDINATES)),
       findUsers: jest.fn().mockResolvedValue([{ role: 'SALES_EMPLOYEE' }]),
       canViewRole,
-      getDescendantRoleNames: jest.fn(),
+      getDescendantRoleKeys: jest.fn(),
     });
     const { req, res, next } = makeReqRes({ id: 'mgr-1', role: 'SALES_MANAGER' }, { userId: 'u1' });
 
@@ -58,7 +58,7 @@ describe('requireSubordinateAccess', () => {
       hasCapability: jest.fn(capabilityHeld(SystemCapabilities.VIEW_SUBORDINATES)),
       findUsers: jest.fn().mockResolvedValue([{ role: 'SUPPORT_EMPLOYEE' }]),
       canViewRole: jest.fn().mockResolvedValue(false),
-      getDescendantRoleNames: jest.fn(),
+      getDescendantRoleKeys: jest.fn(),
     });
     const { req, res, next, status } = makeReqRes(
       { id: 'mgr-1', role: 'SALES_MANAGER' },
@@ -76,7 +76,7 @@ describe('requireSubordinateAccess', () => {
       hasCapability: jest.fn(capabilityHeld(SystemCapabilities.VIEW_SUBORDINATES)),
       findUsers: jest.fn().mockResolvedValue([]),
       canViewRole: jest.fn(),
-      getDescendantRoleNames: jest.fn(),
+      getDescendantRoleKeys: jest.fn(),
     });
     const { req, res, next, status } = makeReqRes(
       { id: 'mgr-1', role: 'SALES_MANAGER' },
@@ -94,7 +94,7 @@ describe('requireSubordinateAccess', () => {
       hasCapability: jest.fn().mockResolvedValue(false),
       findUsers: jest.fn(),
       canViewRole: jest.fn(),
-      getDescendantRoleNames: jest.fn(),
+      getDescendantRoleKeys: jest.fn(),
     });
     const { req, res, next, status } = makeReqRes({ id: 'u-1', role: 'USER' }, { userId: 'u2' });
 
@@ -109,7 +109,7 @@ describe('requireSubordinateAccess', () => {
       hasCapability: jest.fn(),
       findUsers: jest.fn(),
       canViewRole: jest.fn(),
-      getDescendantRoleNames: jest.fn(),
+      getDescendantRoleKeys: jest.fn(),
     });
     const { req, res, next, status } = makeReqRes(undefined, { userId: 'u1' });
 
@@ -122,34 +122,34 @@ describe('requireSubordinateAccess', () => {
 
 describe('attachHierarchyScope', () => {
   it('sets a null scope for ADMIN', async () => {
-    const getDescendantRoleNames = jest.fn();
+    const getDescendantRoleKeys = jest.fn();
     const { attachHierarchyScope } = createHierarchyMiddleware({
       hasCapability: jest.fn(capabilityHeld(SystemCapabilities.ACCESS_ADMIN)),
       findUsers: jest.fn(),
       canViewRole: jest.fn(),
-      getDescendantRoleNames,
+      getDescendantRoleKeys,
     });
     const { req, res, next } = makeReqRes({ id: 'admin-1', role: 'ADMIN' });
 
     await attachHierarchyScope(req, res, next);
 
     expect(req.hierarchyScope).toBeNull();
-    expect(getDescendantRoleNames).not.toHaveBeenCalled();
+    expect(getDescendantRoleKeys).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it('sets viewableRoleNames for a VIEW_SUBORDINATES holder', async () => {
+  it('sets viewableRoleKeys for a VIEW_SUBORDINATES holder', async () => {
     const { attachHierarchyScope } = createHierarchyMiddleware({
       hasCapability: jest.fn(capabilityHeld(SystemCapabilities.VIEW_SUBORDINATES)),
       findUsers: jest.fn(),
       canViewRole: jest.fn(),
-      getDescendantRoleNames: jest.fn().mockResolvedValue(['SALES_EMPLOYEE']),
+      getDescendantRoleKeys: jest.fn().mockResolvedValue(['SALES_EMPLOYEE']),
     });
     const { req, res, next } = makeReqRes({ id: 'mgr-1', role: 'SALES_MANAGER' });
 
     await attachHierarchyScope(req, res, next);
 
-    expect(req.hierarchyScope).toEqual({ viewableRoleNames: ['SALES_EMPLOYEE'] });
+    expect(req.hierarchyScope).toEqual({ viewableRoleKeys: ['SALES_EMPLOYEE'] });
     expect(next).toHaveBeenCalledTimes(1);
   });
 
@@ -158,7 +158,7 @@ describe('attachHierarchyScope', () => {
       hasCapability: jest.fn().mockResolvedValue(false),
       findUsers: jest.fn(),
       canViewRole: jest.fn(),
-      getDescendantRoleNames: jest.fn(),
+      getDescendantRoleKeys: jest.fn(),
     });
     const { req, res, next, status } = makeReqRes({ id: 'u-1', role: 'USER' });
 

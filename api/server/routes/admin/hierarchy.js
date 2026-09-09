@@ -8,7 +8,7 @@ const router = express.Router();
 
 const handlers = createAdminHierarchyHandlers({
   hasCapability,
-  getDescendantRoleNames: db.getDescendantRoleNames,
+  getDescendantRoleKeys: db.getDescendantRoleKeys,
 });
 
 router.use(requireJwtAuth);

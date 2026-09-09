@@ -35,6 +35,7 @@ jest.mock('~/data-provider', () => ({
   useAdminUserConversation: (...args: unknown[]) => mockUseAdminUserConversation(...args),
   useAdminUserMessages: (...args: unknown[]) => mockUseAdminUserMessages(...args),
   useMyHierarchy: (...args: unknown[]) => mockUseMyHierarchy(...args),
+  useAdminRoles: () => ({ data: { roles: [] } }),
   useSetUserRole: () => ({ mutate: mockSetUserRoleMutate, isLoading: false }),
 }));
 
@@ -77,7 +78,7 @@ beforeEach(() => {
   mockUseAdminUserConversations.mockReturnValue({ data: { pages: [] }, isLoading: false });
   mockUseAdminUserConversation.mockReturnValue({ data: undefined });
   mockUseAdminUserMessages.mockReturnValue({ data: [], isLoading: false });
-  mockUseMyHierarchy.mockReturnValue({ data: { isAdmin: true, manageableRoleNames: [] } });
+  mockUseMyHierarchy.mockReturnValue({ data: { isAdmin: true, manageableRoleKeys: [] } });
 });
 
 describe('UsersView', () => {
@@ -105,7 +106,7 @@ describe('UsersView', () => {
   });
 
   it('shows a plain role badge for an admin viewer', () => {
-    mockUseMyHierarchy.mockReturnValue({ data: { isAdmin: true, manageableRoleNames: [] } });
+    mockUseMyHierarchy.mockReturnValue({ data: { isAdmin: true, manageableRoleKeys: [] } });
     mockUseAdminUsers.mockReturnValue({
       data: {
         users: [{ id: 'u1', name: 'Ann', email: 'a@x.io', role: 'SALES_EMPLOYEE' }],
@@ -122,7 +123,7 @@ describe('UsersView', () => {
     mockUseMyHierarchy.mockReturnValue({
       data: {
         isAdmin: false,
-        manageableRoleNames: ['SALES_EMPLOYEE', 'SALES_EMPLOYEE_TIER_2'],
+        manageableRoleKeys: ['SALES_EMPLOYEE', 'SALES_EMPLOYEE_TIER_2'],
       },
     });
     mockUseAdminUsers.mockReturnValue({

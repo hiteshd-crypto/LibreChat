@@ -66,7 +66,7 @@ export interface AdminUsersDeps {
   }) => Promise<void>;
 }
 
-/** Narrows a user filter to the caller's viewable role names when a hierarchy scope is set. */
+/** Narrows a user filter to the caller's viewable role keys when a hierarchy scope is set. */
 function withHierarchyScope(
   filter: FilterQuery<IUser>,
   scope: ServerRequest['hierarchyScope'],
@@ -74,7 +74,7 @@ function withHierarchyScope(
   if (!scope) {
     return filter;
   }
-  return { ...filter, role: { $in: scope.viewableRoleNames } };
+  return { ...filter, role: { $in: scope.viewableRoleKeys } };
 }
 
 export function createAdminUsersHandlers(deps: AdminUsersDeps): {
@@ -285,12 +285,13 @@ export function createAdminUsersHandlers(deps: AdminUsersDeps): {
   }
 
   /**
-   * `PATCH /api/admin/users/:userId/role` — reassigns a user's role.
+   * `PATCH /api/admin/users/:userId/role` — reassigns a user's role. The `{ role }`
+   * body is a `roleKey`.
    *
    * `requireSubordinateAccess` has already proved the caller may see the
    * target's *current* role. This handler adds the second half of the two-sided
    * check: a non-ADMIN caller must also be allowed to see the *requested* role
-   * (`canViewRole`), so a MANAGER can move an EMPLOYEE within its own subtree
+   * key (`canViewRole`), so a MANAGER can move an EMPLOYEE within its own subtree
    * but never up to its own tier or sideways into another branch. `canViewRole`
    * returns `true` for every role when the actor is ADMIN.
    */

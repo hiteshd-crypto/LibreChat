@@ -501,11 +501,11 @@ export const toolFavorite = (itemType: string, itemId: string) =>
 /* Roles */
 export const roles = () => `${BASE_URL}/api/roles`;
 export const adminRoles = () => `${BASE_URL}/api/admin/roles`;
-export const adminRole = (name: string) => `${adminRoles()}/${encodeURIComponent(name)}`;
-export const adminRoleMembers = (name: string, params?: { limit?: number; offset?: number }) =>
-  `${adminRole(name)}/members${buildQuery(params ?? {})}`;
-export const adminRoleMember = (name: string, userId: string) =>
-  `${adminRole(name)}/members/${encodeURIComponent(userId)}`;
+export const adminRole = (roleKey: string) => `${adminRoles()}/${encodeURIComponent(roleKey)}`;
+export const adminRoleMembers = (roleKey: string, params?: { limit?: number; offset?: number }) =>
+  `${adminRole(roleKey)}/members${buildQuery(params ?? {})}`;
+export const adminRoleMember = (roleKey: string, userId: string) =>
+  `${adminRole(roleKey)}/members/${encodeURIComponent(userId)}`;
 export const adminUsers = (params?: { limit?: number; offset?: number }) =>
   `${BASE_URL}/api/admin/users${buildQuery(params ?? {})}`;
 export const adminUserSearch = (q: string, limit?: number) =>

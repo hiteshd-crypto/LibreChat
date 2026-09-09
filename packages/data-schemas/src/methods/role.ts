@@ -42,9 +42,17 @@ export function createRoleMethods(
   listRoles: (options?: {
     limit?: number;
     offset?: number;
-  }) => Promise<Pick<IRole, '_id' | 'name' | 'description' | 'parentRole' | 'depth'>[]>;
+  }) => Promise<Pick<IRole, '_id' | 'roleKey' | 'name' | 'description' | 'parentRole' | 'depth'>[]>;
   countRoles: () => Promise<number>;
   initializeRoles: () => Promise<void>;
+  migrateRoleKeys: (options?: { dryRun?: boolean }) => Promise<{
+    keyed: number;
+    parentLinks: number;
+    users: number;
+    principals: number;
+    dryRun: boolean;
+    planned?: string[];
+  }>;
   getRoleByName: (roleName: string, fieldsToSelect?: string | string[] | null) => Promise<IRole>;
   findRolesByNames: (
     roleNames: string[],
@@ -67,13 +75,13 @@ export function createRoleMethods(
     options?: { limit?: number; offset?: number },
   ) => Promise<IUser[]>;
   countUsersByRole: (roleName: string) => Promise<number>;
-  getAncestorRoleNames: (roleName: string) => Promise<string[]>;
-  getDescendantRoleNames: (roleName: string) => Promise<string[]>;
-  isDescendantOf: (childRole: string, ancestorRole: string) => Promise<boolean>;
-  canViewRole: (actorRole: string, targetRole: string) => Promise<boolean>;
-  wouldCreateCycle: (roleName: string, newParentName: string | null) => Promise<boolean>;
-  setRoleParent: (roleName: string, newParentName: string | null) => Promise<IRole>;
-  countChildRoles: (roleName: string) => Promise<number>;
+  getAncestorRoleKeys: (roleKey: string) => Promise<string[]>;
+  getDescendantRoleKeys: (roleKey: string) => Promise<string[]>;
+  isDescendantOf: (childKey: string, ancestorKey: string) => Promise<boolean>;
+  canViewRole: (actorKey: string, targetKey: string) => Promise<boolean>;
+  wouldCreateCycle: (roleKey: string, newParentKey: string | null) => Promise<boolean>;
+  setRoleParent: (roleKey: string, newParentKey: string | null) => Promise<IRole>;
+  countChildRoles: (roleKey: string) => Promise<number>;
 } {
   /**
    * Initialize default roles in the system.
@@ -140,21 +148,134 @@ export function createRoleMethods(
       }
       await role.save();
     }
+
+    await migrateRoleKeys();
   }
 
   /**
-   * List all roles in the system. Projects name, description, and the hierarchy
-   * fields (`parentRole`, `depth`) the admin Access tree renders from.
+   * One-time, idempotent migration from name-based to `roleKey`-based references.
+   * Runs inside `initializeRoles` at boot (before the server accepts traffic) and
+   * via the `migrate:role-keys` CLI. Names are still globally unique when the
+   * name→key map is built, so every rewrite below is unambiguous.
+   */
+  async function migrateRoleKeys(options: { dryRun?: boolean } = {}): Promise<{
+    keyed: number;
+    parentLinks: number;
+    users: number;
+    principals: number;
+    dryRun: boolean;
+    planned?: string[];
+  }> {
+    const dryRun = options.dryRun === true;
+    const Role = mongoose.models.Role as Model<IRole>;
+    const User = mongoose.models.User as Model<IUser>;
+    const planned: string[] = [];
+
+    /* eslint-disable no-restricted-syntax -- boot migration: reads/writes pre-hook, off-schema, and cross-collection refs on the global (non-tenant) Role/User collections. */
+    const rawRoles = await Role.collection
+      .find({}, { projection: { name: 1, parentRole: 1, roleKey: 1 } })
+      .toArray();
+
+    const needsKey = rawRoles.filter((role) => !role.roleKey);
+    const keyByName = new Map<string, string>();
+    for (const role of rawRoles) {
+      const key =
+        (role.roleKey as string | undefined) ??
+        (isSystemRoleName(role.name) ? role.name.toUpperCase() : String(role._id));
+      keyByName.set(role.name, key);
+    }
+    const knownKeys = new Set(keyByName.values());
+
+    for (const role of needsKey) {
+      const key = keyByName.get(role.name) as string;
+      planned.push(`role "${role.name}" → roleKey ${key}`);
+      if (!dryRun) {
+        await Role.collection.updateOne({ _id: role._id }, { $set: { roleKey: key } });
+      }
+    }
+
+    let parentLinks = 0;
+    for (const role of rawRoles) {
+      const parent = role.parentRole as string | null | undefined;
+      if (parent && !knownKeys.has(parent) && keyByName.has(parent)) {
+        const key = keyByName.get(parent) as string;
+        planned.push(`role "${role.name}".parentRole "${parent}" → ${key}`);
+        parentLinks += 1;
+        if (!dryRun) {
+          await Role.collection.updateOne({ _id: role._id }, { $set: { parentRole: key } });
+        }
+      }
+    }
+
+    let users = 0;
+    let principals = 0;
+    const migratedUserIds: string[] = [];
+    for (const role of rawRoles) {
+      if (isSystemRoleName(role.name)) {
+        continue;
+      }
+      const key = keyByName.get(role.name) as string;
+      if (key === role.name) {
+        continue;
+      }
+      const affected = await User.collection
+        .find({ role: role.name }, { projection: { _id: 1 } })
+        .toArray();
+      if (affected.length > 0) {
+        planned.push(`${affected.length} user(s) role "${role.name}" → ${key}`);
+        users += affected.length;
+        migratedUserIds.push(...affected.map((user) => String(user._id)));
+        if (!dryRun) {
+          await User.collection.updateMany({ role: role.name }, { $set: { role: key } });
+        }
+      }
+      for (const collectionName of ['systemgrants', 'configs', 'aclentries']) {
+        const filter = { principalType: 'role', principalId: role.name };
+        const count = await mongoose.connection.collection(collectionName).countDocuments(filter);
+        if (count > 0) {
+          planned.push(`${count} ${collectionName} principal "${role.name}" → ${key}`);
+          principals += count;
+          if (!dryRun) {
+            await mongoose.connection
+              .collection(collectionName)
+              .updateMany(filter, { $set: { principalId: key } });
+          }
+        }
+      }
+    }
+
+    if (!dryRun && (needsKey.length > 0 || parentLinks > 0)) {
+      await Role.collection.dropIndex('name_1_tenantId_1').catch(() => undefined);
+      await Role.syncIndexes();
+      const cache = deps.getCache?.(CacheKeys.ROLES);
+      if (cache) {
+        await Promise.all(
+          [...keyByName.values()].map((key) => cache.set(scopedCacheKey(key), null)),
+        );
+      }
+      await invalidateAuthUserDocCache(migratedUserIds);
+      logger.info(
+        `[migrateRoleKeys] keyed=${needsKey.length} parentLinks=${parentLinks} users=${users} principals=${principals}`,
+      );
+    }
+    /* eslint-enable no-restricted-syntax */
+
+    return { keyed: needsKey.length, parentLinks, users, principals, dryRun, planned };
+  }
+
+  /**
+   * List all roles in the system. Projects `roleKey`, name, description, and the
+   * hierarchy fields (`parentRole`, `depth`) the admin Access tree renders from.
    */
   async function listRoles(options?: {
     limit?: number;
     offset?: number;
-  }): Promise<Pick<IRole, '_id' | 'name' | 'description' | 'parentRole' | 'depth'>[]> {
+  }): Promise<Pick<IRole, '_id' | 'roleKey' | 'name' | 'description' | 'parentRole' | 'depth'>[]> {
     const Role = mongoose.models.Role as Model<IRole>;
     const limit = options?.limit ?? 50;
     const offset = options?.offset ?? 0;
     return await Role.find({})
-      .select('name description parentRole depth')
+      .select('roleKey name description parentRole depth')
       .sort({ name: 1 })
       .skip(offset)
       .limit(limit)
@@ -167,38 +288,39 @@ export function createRoleMethods(
   }
 
   /**
-   * Retrieve a role by name and convert the found role document to a plain object.
-   * If the role with the given name doesn't exist and the name is a system defined role,
-   * create it and return the lean version.
+   * Retrieve a role by its `roleKey` (the system-role sentinels `ADMIN`/`USER`, or a
+   * custom role's `_id` string) and convert the found document to a plain object.
+   * When the role is missing and `roleRef` is a system-role name, create it and
+   * return the lean version.
    */
   async function getRoleByName(
-    roleName: string,
+    roleRef: string,
     fieldsToSelect: string | string[] | null = null,
   ): Promise<IRole> {
     const cache = deps.getCache?.(CacheKeys.ROLES);
     try {
       if (cache) {
-        const cachedRole = await cache.get(scopedCacheKey(roleName));
+        const cachedRole = await cache.get(scopedCacheKey(roleRef));
         if (cachedRole) {
           return cachedRole as IRole;
         }
       }
       const Role = mongoose.models.Role;
-      let query = Role.findOne({ name: roleName });
+      let query = Role.findOne({ roleKey: roleRef });
       if (fieldsToSelect) {
         query = query.select(fieldsToSelect);
       }
       const role = await query.lean().exec();
 
-      if (!role && systemRoleValues.has(roleName)) {
-        const newRole = await new Role(roleDefaults[roleName as keyof typeof roleDefaults]).save();
+      if (!role && systemRoleValues.has(roleRef)) {
+        const newRole = await new Role(roleDefaults[roleRef as keyof typeof roleDefaults]).save();
         if (cache) {
-          await cache.set(scopedCacheKey(roleName), newRole);
+          await cache.set(scopedCacheKey(roleRef), newRole);
         }
         return newRole.toObject() as IRole;
       }
       if (cache) {
-        await cache.set(scopedCacheKey(roleName), role);
+        await cache.set(scopedCacheKey(roleRef), role);
       }
       return role as unknown as IRole;
     } catch (error) {
@@ -229,10 +351,17 @@ export function createRoleMethods(
       }
 
       const Role = mongoose.models.Role;
+      /**
+       * A config-declared list may still hold role *names* while `user.role` now
+       * holds a `roleKey` — match either so both keep resolving.
+       */
       const nameFilter = {
-        $or: uniqueRoleNames.map((roleName) => ({
-          name: new RegExp(`^${escapeRegExp(roleName)}$`, 'i'),
-        })),
+        $or: [
+          { roleKey: { $in: uniqueRoleNames } },
+          ...uniqueRoleNames.map((roleName) => ({
+            name: new RegExp(`^${escapeRegExp(roleName)}$`, 'i'),
+          })),
+        ],
       };
 
       const runQuery = (filter: Record<string, unknown>) => {
@@ -257,34 +386,45 @@ export function createRoleMethods(
   }
 
   /**
-   * Update role values by name.
+   * Update a role addressed by its `roleKey`. A rename is a single-document write —
+   * children reference the parent's `roleKey`, and users reference `roleKey`, so
+   * nothing else moves. Rejects a rename that would collide with a direct sibling.
    */
-  async function updateRoleByName(roleName: string, updates: Partial<IRole>): Promise<IRole> {
+  async function updateRoleByName(roleRef: string, updates: Partial<IRole>): Promise<IRole> {
     const cache = deps.getCache?.(CacheKeys.ROLES);
     try {
-      const Role = mongoose.models.Role;
-      const role = await Role.findOneAndUpdate({ name: roleName }, { $set: updates }, { new: true })
+      const Role = mongoose.models.Role as Model<IRole>;
+      if (updates.name) {
+        const self = await Role.findOne({ roleKey: roleRef }, 'parentRole').lean();
+        const clash = await Role.exists({
+          parentRole: self?.parentRole ?? null,
+          name: updates.name,
+          roleKey: { $ne: roleRef },
+        });
+        if (clash) {
+          throw new RoleConflictError(`A role named "${updates.name}" already exists here`);
+        }
+      }
+      const role = await Role.findOneAndUpdate(
+        { roleKey: roleRef },
+        { $set: updates },
+        { new: true },
+      )
         .select('-__v')
         .lean()
         .exec();
-      if (updates.name && updates.name !== roleName) {
-        await repointChildRoles(roleName, updates.name);
-      }
       if (cache) {
-        if (updates.name && updates.name !== roleName) {
-          await Promise.all([
-            cache.set(scopedCacheKey(roleName), null),
-            cache.set(scopedCacheKey(updates.name), role),
-          ]);
-        } else {
-          await cache.set(scopedCacheKey(roleName), role);
-        }
+        await cache.set(scopedCacheKey(roleRef), role);
       }
       return role as unknown as IRole;
     } catch (error) {
+      if (error instanceof RoleConflictError) {
+        throw error;
+      }
       if (error && typeof error === 'object' && 'code' in error && error.code === 11000) {
-        const targetName = updates.name ?? roleName;
-        throw new RoleConflictError(`Role "${targetName}" already exists`);
+        throw new RoleConflictError(
+          `A role named "${updates.name ?? roleRef}" already exists here`,
+        );
       }
       const updateError = new Error(
         `Failed to update role: ${(error as Error).message}`,
@@ -298,6 +438,7 @@ export function createRoleMethods(
 
   /**
    * Updates access permissions for a specific role and multiple permission types.
+   * `roleName` holds a `roleKey` (system sentinel or a custom role's `_id`).
    */
   async function updateAccessPermissions(
     roleName: string,
@@ -426,7 +567,7 @@ export function createRoleMethods(
 
           try {
             await Role.updateOne(
-              { name: roleName },
+              { roleKey: roleName },
               {
                 $set: updateObj,
                 $unset: unsetFields,
@@ -434,7 +575,10 @@ export function createRoleMethods(
             );
 
             const cache = deps.getCache?.(CacheKeys.ROLES);
-            const updatedRole = await Role.findOne({ name: roleName }).select('-__v').lean().exec();
+            const updatedRole = await Role.findOne({ roleKey: roleName })
+              .select('-__v')
+              .lean()
+              .exec();
             if (cache) {
               await cache.set(scopedCacheKey(roleName), updatedRole);
             }
@@ -525,7 +669,12 @@ export function createRoleMethods(
     }
   }
 
-  /** Rejects names that match system roles. */
+  /**
+   * Creates a custom role. `roleData.parentRole` is the parent's `roleKey` (or
+   * `null`/absent for a top-level role). `roleKey` is minted by the schema's
+   * `pre('validate')` hook. Rejects: a reserved system name; a name that collides
+   * with a direct sibling (or, at top level, another top-level role).
+   */
   async function createRoleByName(roleData: Partial<IRole>): Promise<IRole> {
     const { name } = roleData;
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -535,25 +684,34 @@ export function createRoleMethods(
     if (isSystemRoleName(trimmed)) {
       throw new RoleConflictError(`Cannot create role with reserved system name: ${name}`);
     }
-    const Role = mongoose.models.Role;
-    const existing = await Role.findOne({ name: trimmed }).lean();
-    if (existing) {
-      throw new RoleConflictError(`Role "${trimmed}" already exists`);
-    }
+    const Role = mongoose.models.Role as Model<IRole>;
 
     const { parentRole } = roleData;
     let depth = 0;
+    let parentKey: string | null = null;
     if (parentRole != null) {
-      if (isSystemRoleName(parentRole)) {
-        throw new Error(`Cannot set parent to system role: ${parentRole}`);
-      }
-      const parent = (await Role.findOne({ name: parentRole }, 'depth').lean()) as {
+      const parent = (await Role.findOne({ roleKey: parentRole }, 'depth name roleKey').lean()) as {
         depth?: number;
+        name: string;
+        roleKey: string;
       } | null;
       if (!parent) {
         throw new Error(`Parent role "${parentRole}" does not exist`);
       }
+      if (isSystemRoleName(parent.name)) {
+        throw new Error(`Cannot set parent to system role: ${parent.name}`);
+      }
+      parentKey = parent.roleKey;
       depth = (parent.depth ?? 0) + 1;
+    }
+
+    const sibling = await Role.findOne({ parentRole: parentKey, name: trimmed }).lean();
+    if (sibling) {
+      throw new RoleConflictError(
+        parentKey
+          ? `A role named "${trimmed}" already exists under this parent`
+          : `A top-level role named "${trimmed}" already exists`,
+      );
     }
 
     let role;
@@ -561,28 +719,26 @@ export function createRoleMethods(
       role = await new Role({
         ...roleData,
         name: trimmed,
-        parentRole: parentRole ?? null,
+        parentRole: parentKey,
         depth,
       }).save();
     } catch (err) {
       /**
-       * The compound unique index `{ name: 1, tenantId: 1 }` on the role schema
-       * (roleSchema.index in schema/role.ts) triggers error 11000 when a concurrent
-       * request races past the findOne check above. This catch converts it into
-       * the same user-facing message as the application-level duplicate check.
+       * The `{ parentRole, name, tenantId }` unique index triggers error 11000
+       * when a concurrent request races past the `findOne` check above.
        */
       if (err && typeof err === 'object' && 'code' in err && err.code === 11000) {
-        throw new RoleConflictError(`Role "${trimmed}" already exists`);
+        throw new RoleConflictError(`A role named "${trimmed}" already exists here`);
       }
       throw err;
     }
     try {
       const cache = deps.getCache?.(CacheKeys.ROLES);
       if (cache) {
-        await cache.set(scopedCacheKey(role.name), role.toObject());
+        await cache.set(scopedCacheKey(role.roleKey), role.toObject());
       }
     } catch (cacheError) {
-      logger.error(`[createRoleByName] cache set failed for "${role.name}":`, cacheError);
+      logger.error(`[createRoleByName] cache set failed for "${role.roleKey}":`, cacheError);
     }
     return role.toObject() as IRole;
   }
@@ -601,32 +757,36 @@ export function createRoleMethods(
    * the delete call, which will succeed since the `updateMany` is a no-op on
    * the second pass.
    */
-  async function deleteRoleByName(roleName: string): Promise<IRole | null> {
-    if (isSystemRoleName(roleName)) {
-      throw new Error(`Cannot delete system role: ${roleName}`);
+  async function deleteRoleByName(roleRef: string): Promise<IRole | null> {
+    const Role = mongoose.models.Role as Model<IRole>;
+    const doc = await Role.findOne({ roleKey: roleRef }, 'name roleKey').lean();
+    if (!doc) {
+      return null;
     }
-    const childCount = await countChildRoles(roleName);
+    if (isSystemRoleName(doc.name)) {
+      throw new Error(`Cannot delete system role: ${doc.name}`);
+    }
+    const childCount = await countChildRoles(roleRef);
     if (childCount > 0) {
       throw new RoleConflictError(
-        `Cannot delete role "${roleName}": it has ${childCount} child role(s). Re-parent or delete them first.`,
+        `Cannot delete role "${doc.name}": it has ${childCount} child role(s). Re-parent or delete them first.`,
       );
     }
-    const Role = mongoose.models.Role;
     const User = mongoose.models.User as Model<IUser>;
-    const affectedUserIds = await findUserIdsByRole(roleName);
-    await User.updateMany({ role: roleName }, { $set: { role: SystemRoles.USER } });
+    const affectedUserIds = await findUserIdsByRole(roleRef);
+    await User.updateMany({ role: roleRef }, { $set: { role: SystemRoles.USER } });
     await invalidateAuthUserDocCache(affectedUserIds);
-    const deleted = await Role.findOneAndDelete({ name: roleName }).lean();
+    const deleted = await Role.findOneAndDelete({ roleKey: roleRef }).lean();
     try {
       const cache = deps.getCache?.(CacheKeys.ROLES);
       if (cache) {
         // Setting null evicts the stale document. getRoleByName treats falsy cached
         // values as a miss and falls through to the DB, so this does not provide
         // negative caching — it only prevents serving the pre-deletion document.
-        await cache.set(scopedCacheKey(roleName), null);
+        await cache.set(scopedCacheKey(roleRef), null);
       }
     } catch (cacheError) {
-      logger.error(`[deleteRoleByName] cache invalidation failed for "${roleName}":`, cacheError);
+      logger.error(`[deleteRoleByName] cache invalidation failed for "${roleRef}":`, cacheError);
     }
     return deleted as IRole | null;
   }
@@ -703,54 +863,69 @@ export function createRoleMethods(
   /**
    * Hierarchy resolver — the single owner of every `parentRole` traversal.
    *
-   * Each call reads a fresh `{ name, parentRole }` projection of the whole roles
-   * collection (~10 rows) rather than the individual-doc `CacheKeys.ROLES` cache,
-   * so an authorization decision is never made against a stale tree after a
-   * re-parent or rename, and there is no cache-invalidation dependency to get wrong.
+   * Each call reads a fresh `{ roleKey, parentRole }` projection of the whole
+   * roles collection (~10 rows) rather than the individual-doc `CacheKeys.ROLES`
+   * cache, so an authorization decision is never made against a stale tree after
+   * a re-parent or rename, and there is no cache-invalidation dependency to get
+   * wrong. Every value below is a `roleKey`.
    */
   interface RoleGraphNode {
-    name: string;
+    roleKey: string;
     parentRole: string | null;
   }
 
   async function fetchRoleGraph(): Promise<RoleGraphNode[]> {
     const Role = mongoose.models.Role as Model<IRole>;
-    return await Role.find({}, 'name parentRole').lean<RoleGraphNode[]>();
+    return await Role.find({}, 'roleKey parentRole').lean<RoleGraphNode[]>();
   }
 
   function buildChildrenMap(graph: RoleGraphNode[]): Map<string, string[]> {
     const children = new Map<string, string[]>();
-    for (const { name, parentRole } of graph) {
+    for (const { roleKey, parentRole } of graph) {
       if (!parentRole) {
         continue;
       }
       const siblings = children.get(parentRole) ?? [];
-      siblings.push(name);
+      siblings.push(roleKey);
       children.set(parentRole, siblings);
     }
     return children;
   }
 
-  async function getAncestorRoleNames(roleName: string): Promise<string[]> {
+  /** Walks `parentRole` to the top of the branch; returns `roleKey` itself when already top-level. */
+  function rootKeyOf(graph: RoleGraphNode[], roleKey: string): string {
+    const parentByKey = new Map(graph.map((node) => [node.roleKey, node.parentRole]));
+    const seen = new Set<string>([roleKey]);
+    let current = roleKey;
+    let parent = parentByKey.get(current) ?? null;
+    while (parent && !seen.has(parent)) {
+      current = parent;
+      seen.add(current);
+      parent = parentByKey.get(current) ?? null;
+    }
+    return current;
+  }
+
+  async function getAncestorRoleKeys(roleKey: string): Promise<string[]> {
     const graph = await fetchRoleGraph();
-    const parentByName = new Map(graph.map((node) => [node.name, node.parentRole]));
+    const parentByKey = new Map(graph.map((node) => [node.roleKey, node.parentRole]));
     const ancestors: string[] = [];
-    const seen = new Set<string>([roleName]);
-    let current = parentByName.get(roleName) ?? null;
+    const seen = new Set<string>([roleKey]);
+    let current = parentByKey.get(roleKey) ?? null;
     while (current && !seen.has(current)) {
       ancestors.push(current);
       seen.add(current);
-      current = parentByName.get(current) ?? null;
+      current = parentByKey.get(current) ?? null;
     }
     return ancestors;
   }
 
-  async function getDescendantRoleNames(roleName: string): Promise<string[]> {
+  async function getDescendantRoleKeys(roleKey: string): Promise<string[]> {
     const graph = await fetchRoleGraph();
     const children = buildChildrenMap(graph);
     const descendants: string[] = [];
     const seen = new Set<string>();
-    const queue = [...(children.get(roleName) ?? [])];
+    const queue = [...(children.get(roleKey) ?? [])];
     while (queue.length > 0) {
       const next = queue.shift() as string;
       if (seen.has(next)) {
@@ -763,125 +938,129 @@ export function createRoleMethods(
     return descendants;
   }
 
-  async function isDescendantOf(childRole: string, ancestorRole: string): Promise<boolean> {
-    const ancestors = await getAncestorRoleNames(childRole);
-    return ancestors.includes(ancestorRole);
+  async function isDescendantOf(childKey: string, ancestorKey: string): Promise<boolean> {
+    const ancestors = await getAncestorRoleKeys(childKey);
+    return ancestors.includes(ancestorKey);
   }
 
-  async function canViewRole(actorRole: string, targetRole: string): Promise<boolean> {
-    if (actorRole === SystemRoles.ADMIN) {
+  async function canViewRole(actorKey: string, targetKey: string): Promise<boolean> {
+    if (actorKey === SystemRoles.ADMIN) {
       return true;
     }
-    return isDescendantOf(targetRole, actorRole);
+    return isDescendantOf(targetKey, actorKey);
   }
 
-  async function wouldCreateCycle(
-    roleName: string,
-    newParentName: string | null,
-  ): Promise<boolean> {
-    if (!newParentName) {
+  async function wouldCreateCycle(roleKey: string, newParentKey: string | null): Promise<boolean> {
+    if (!newParentKey) {
       return false;
     }
-    if (newParentName === roleName) {
+    if (newParentKey === roleKey) {
       return true;
     }
-    const descendants = await getDescendantRoleNames(roleName);
-    return descendants.includes(newParentName);
+    const descendants = await getDescendantRoleKeys(roleKey);
+    return descendants.includes(newParentKey);
   }
 
-  async function countChildRoles(roleName: string): Promise<number> {
+  async function countChildRoles(roleKey: string): Promise<number> {
     const Role = mongoose.models.Role;
-    return await Role.countDocuments({ parentRole: roleName });
+    return await Role.countDocuments({ parentRole: roleKey });
   }
 
   /**
-   * Repoints every child's `parentRole` reference when a role is renamed
-   * (children reference the parent by name). Private to this module — the only
-   * caller is `updateRoleByName`'s rename path.
+   * Re-parents a role addressed by its `roleKey` and recomputes `depth` for it
+   * and its whole subtree. Throws a plain `Error` for a missing role/parent or a
+   * system role; `RoleConflictError` for a cycle, a cross-branch move (the new
+   * parent's top-level root differs from the role's), or a name clash with an
+   * existing child of the new parent. `newParentKey === null` is rejected for a
+   * non-top-level role (its root would change) and is a no-op for a top-level one.
    */
-  async function repointChildRoles(oldParentName: string, newParentName: string): Promise<void> {
+  async function setRoleParent(roleKey: string, newParentKey: string | null): Promise<IRole> {
     const Role = mongoose.models.Role as Model<IRole>;
-    const children = await Role.find({ parentRole: oldParentName }, 'name').lean<
-      { name: string }[]
-    >();
-    if (children.length === 0) {
-      return;
+    const self = await Role.findOne({ roleKey }, 'name roleKey parentRole').lean();
+    if (!self) {
+      throw new Error(`Role "${roleKey}" not found`);
     }
-    await Role.updateMany({ parentRole: oldParentName }, { $set: { parentRole: newParentName } });
-    const cache = deps.getCache?.(CacheKeys.ROLES);
-    if (cache) {
-      await Promise.all(children.map((child) => cache.set(scopedCacheKey(child.name), null)));
-    }
-  }
-
-  /**
-   * Re-parents a role and recomputes `depth` for it and its whole subtree.
-   * Throws a plain `Error` for a missing or system-role parent (or re-parenting a
-   * system role), and `RoleConflictError` for a cycle.
-   */
-  async function setRoleParent(roleName: string, newParentName: string | null): Promise<IRole> {
-    if (isSystemRoleName(roleName)) {
-      throw new Error(`Cannot re-parent system role: ${roleName}`);
-    }
-    if (newParentName != null && isSystemRoleName(newParentName)) {
-      throw new Error(`Cannot set parent to system role: ${newParentName}`);
+    if (isSystemRoleName(self.name)) {
+      throw new Error(`Cannot re-parent system role: ${self.name}`);
     }
 
-    const Role = mongoose.models.Role as Model<IRole>;
-
-    const parentDoc =
-      newParentName != null
-        ? ((await Role.findOne({ name: newParentName }, 'depth').lean()) as {
-            depth?: number;
-          } | null)
-        : null;
-    if (newParentName != null && !parentDoc) {
-      throw new Error(`Parent role "${newParentName}" does not exist`);
-    }
-    if (await wouldCreateCycle(roleName, newParentName)) {
-      throw new RoleConflictError(`Setting parent to "${newParentName}" would create a cycle`);
+    let parentDoc: { depth?: number; name: string; roleKey: string } | null = null;
+    if (newParentKey != null) {
+      parentDoc = (await Role.findOne({ roleKey: newParentKey }, 'depth name roleKey').lean()) as {
+        depth?: number;
+        name: string;
+        roleKey: string;
+      } | null;
+      if (!parentDoc) {
+        throw new Error(`Parent role "${newParentKey}" does not exist`);
+      }
+      if (isSystemRoleName(parentDoc.name)) {
+        throw new Error(`Cannot set parent to system role: ${parentDoc.name}`);
+      }
     }
 
     const graph = await fetchRoleGraph();
+    if (await wouldCreateCycle(roleKey, newParentKey)) {
+      throw new RoleConflictError(`Setting parent to "${newParentKey}" would create a cycle`);
+    }
+    const currentRoot = rootKeyOf(graph, roleKey);
+    const newRoot = newParentKey != null ? rootKeyOf(graph, newParentKey) : roleKey;
+    if (currentRoot !== newRoot) {
+      throw new RoleConflictError('cannot move a role to a different branch');
+    }
+
+    if (newParentKey != null) {
+      const clash = await Role.exists({
+        parentRole: newParentKey,
+        name: self.name,
+        roleKey: { $ne: roleKey },
+      });
+      if (clash) {
+        throw new RoleConflictError(
+          `A role named "${self.name}" already exists under the target parent`,
+        );
+      }
+    }
+
     const children = buildChildrenMap(graph);
     const newRootDepth = (parentDoc?.depth ?? -1) + 1;
 
-    const depthByName = new Map<string, number>([[roleName, newRootDepth]]);
-    const queue = [roleName];
+    const depthByKey = new Map<string, number>([[roleKey, newRootDepth]]);
+    const queue = [roleKey];
     while (queue.length > 0) {
       const current = queue.shift() as string;
-      const currentDepth = depthByName.get(current) as number;
+      const currentDepth = depthByKey.get(current) as number;
       for (const child of children.get(current) ?? []) {
-        depthByName.set(child, currentDepth + 1);
+        depthByKey.set(child, currentDepth + 1);
         queue.push(child);
       }
     }
 
-    const affectedNames = [...depthByName.keys()];
+    const affectedKeys = [...depthByKey.keys()];
     await Promise.all(
-      affectedNames.map((name) =>
+      affectedKeys.map((key) =>
         Role.updateOne(
-          { name },
-          name === roleName
-            ? { $set: { parentRole: newParentName, depth: newRootDepth } }
-            : { $set: { depth: depthByName.get(name) } },
+          { roleKey: key },
+          key === roleKey
+            ? { $set: { parentRole: newParentKey, depth: newRootDepth } }
+            : { $set: { depth: depthByKey.get(key) } },
         ),
       ),
     );
 
     const [updatedRole, subtreeUserIds] = await Promise.all([
-      Role.findOne({ name: roleName }).select('-__v').lean(),
-      Promise.all(affectedNames.map((name) => findUserIdsByRole(name))).then((ids) => ids.flat()),
+      Role.findOne({ roleKey }).select('-__v').lean(),
+      Promise.all(affectedKeys.map((key) => findUserIdsByRole(key))).then((ids) => ids.flat()),
     ]);
 
     const cache = deps.getCache?.(CacheKeys.ROLES);
     if (cache) {
-      await Promise.all(affectedNames.map((name) => cache.set(scopedCacheKey(name), null)));
+      await Promise.all(affectedKeys.map((key) => cache.set(scopedCacheKey(key), null)));
     }
     await invalidateAuthUserDocCache(subtreeUserIds);
 
     if (!updatedRole) {
-      throw new Error(`Role "${roleName}" not found after re-parenting`);
+      throw new Error(`Role "${roleKey}" not found after re-parenting`);
     }
     return updatedRole as unknown as IRole;
   }
@@ -890,6 +1069,7 @@ export function createRoleMethods(
     listRoles,
     countRoles,
     initializeRoles,
+    migrateRoleKeys,
     getRoleByName,
     findRolesByNames,
     updateRoleByName,
@@ -902,8 +1082,8 @@ export function createRoleMethods(
     updateUsersRoleByIds,
     listUsersByRole,
     countUsersByRole,
-    getAncestorRoleNames,
-    getDescendantRoleNames,
+    getAncestorRoleKeys,
+    getDescendantRoleKeys,
     isDescendantOf,
     canViewRole,
     wouldCreateCycle,

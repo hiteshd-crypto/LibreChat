@@ -17,10 +17,10 @@ export const useCreateRole = (): UseMutationResult<
 export const useUpdateRole = (): UseMutationResult<
   { role: TAdminRole },
   Error,
-  { name: string; updates: { name?: string; description?: string } }
+  { roleKey: string; updates: { name?: string; description?: string } }
 > => {
   const queryClient = useQueryClient();
-  return useMutation(({ name, updates }) => dataService.updateAdminRole(name, updates), {
+  return useMutation(({ roleKey, updates }) => dataService.updateAdminRole(roleKey, updates), {
     onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminRoles]),
   });
 };
@@ -28,15 +28,18 @@ export const useUpdateRole = (): UseMutationResult<
 export const useSetRoleParent = (): UseMutationResult<
   { role: TAdminRole },
   Error,
-  { name: string; parentRole: string | null }
+  { roleKey: string; parentRole: string | null }
 > => {
   const queryClient = useQueryClient();
-  return useMutation(({ name, parentRole }) => dataService.setAdminRoleParent(name, parentRole), {
-    onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.adminRoles]);
-      queryClient.invalidateQueries([QueryKeys.myHierarchy]);
+  return useMutation(
+    ({ roleKey, parentRole }) => dataService.setAdminRoleParent(roleKey, parentRole),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries([QueryKeys.adminRoles]);
+        queryClient.invalidateQueries([QueryKeys.myHierarchy]);
+      },
     },
-  });
+  );
 };
 
 export const useSetUserRole = (): UseMutationResult<
@@ -54,9 +57,13 @@ export const useSetUserRole = (): UseMutationResult<
   });
 };
 
-export const useDeleteRole = (): UseMutationResult<{ success: true }, Error, { name: string }> => {
+export const useDeleteRole = (): UseMutationResult<
+  { success: true },
+  Error,
+  { roleKey: string }
+> => {
   const queryClient = useQueryClient();
-  return useMutation(({ name }) => dataService.deleteAdminRole(name), {
+  return useMutation(({ roleKey }) => dataService.deleteAdminRole(roleKey), {
     onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminRoles]),
   });
 };
@@ -64,12 +71,12 @@ export const useDeleteRole = (): UseMutationResult<{ success: true }, Error, { n
 export const useAddRoleMember = (): UseMutationResult<
   { success: true },
   Error,
-  { roleName: string; userId: string }
+  { roleKey: string; userId: string }
 > => {
   const queryClient = useQueryClient();
-  return useMutation(({ roleName, userId }) => dataService.addAdminRoleMember(roleName, userId), {
-    onSuccess: (_data, { roleName }) => {
-      queryClient.invalidateQueries([QueryKeys.adminRoleMembers, roleName]);
+  return useMutation(({ roleKey, userId }) => dataService.addAdminRoleMember(roleKey, userId), {
+    onSuccess: (_data, { roleKey }) => {
+      queryClient.invalidateQueries([QueryKeys.adminRoleMembers, roleKey]);
       queryClient.invalidateQueries([QueryKeys.adminUsers]);
       // Refetch the current user — if they just changed their own role, the
       // admin route guard re-evaluates and redirects out.
@@ -81,17 +88,14 @@ export const useAddRoleMember = (): UseMutationResult<
 export const useRemoveRoleMember = (): UseMutationResult<
   { success: true },
   Error,
-  { roleName: string; userId: string }
+  { roleKey: string; userId: string }
 > => {
   const queryClient = useQueryClient();
-  return useMutation(
-    ({ roleName, userId }) => dataService.removeAdminRoleMember(roleName, userId),
-    {
-      onSuccess: (_data, { roleName }) => {
-        queryClient.invalidateQueries([QueryKeys.adminRoleMembers, roleName]);
-        queryClient.invalidateQueries([QueryKeys.adminUsers]);
-        queryClient.invalidateQueries([QueryKeys.user]);
-      },
+  return useMutation(({ roleKey, userId }) => dataService.removeAdminRoleMember(roleKey, userId), {
+    onSuccess: (_data, { roleKey }) => {
+      queryClient.invalidateQueries([QueryKeys.adminRoleMembers, roleKey]);
+      queryClient.invalidateQueries([QueryKeys.adminUsers]);
+      queryClient.invalidateQueries([QueryKeys.user]);
     },
-  );
+  });
 };

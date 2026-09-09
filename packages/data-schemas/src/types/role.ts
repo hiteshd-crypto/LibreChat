@@ -83,7 +83,9 @@ export interface IRole extends Document {
     };
   };
   tenantId?: string;
-  /** Name of the parent role in the hierarchy tree. `null`/`undefined` = top-level branch. `ADMIN`/`USER` never set this. */
+  /** Immutable role identifier. System roles: the uppercased name (`ADMIN`/`USER`). Custom roles: the doc `_id` as a string. Every role reference (`user.role`, `parentRole`, ROLE principals) holds this. Filled by a `pre('validate')` hook when omitted. */
+  roleKey: string;
+  /** `roleKey` of the parent role in the hierarchy tree. `null`/`undefined` = top-level branch. `ADMIN`/`USER` never set this. */
   parentRole?: string | null;
   /** Denormalized tree depth (0 for USER, ADMIN, and top-level branches). Display/pre-check only — never used for authorization. */
   depth?: number;

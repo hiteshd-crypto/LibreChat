@@ -131,6 +131,8 @@
     "migrate:prompt-permissions:dry-run": "node config/migrate-prompt-permissions.js --dry-run",
     "migrate:prompt-permissions": "node config/migrate-prompt-permissions.js",
     "migrate:prompt-permissions:batch": "node config/migrate-prompt-permissions.js --batch-size=50",
+    "migrate:role-keys:dry-run": "node config/migrate-role-keys.js --dry-run",
+    "migrate:role-keys": "node config/migrate-role-keys.js",
     "migrate:shared-link-permissions:dry-run": "node config/migrate-shared-link-permissions.js --dry-run",
     "migrate:shared-link-permissions": "node config/migrate-shared-link-permissions.js",
     "migrate:shared-link-permissions:batch": "node config/migrate-shared-link-permissions.js --batch-size=50",

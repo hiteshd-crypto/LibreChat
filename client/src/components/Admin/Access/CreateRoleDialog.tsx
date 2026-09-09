@@ -1,32 +1,28 @@
 import { useState } from 'react';
 import { OGDialog, OGDialogTemplate, Button, Input, Spinner } from '@librechat/client';
-import { useCreateRole, useAdminRoles } from '~/data-provider';
+import type { TAdminRole } from 'librechat-data-provider';
 import { getResponseErrorMessage } from '~/utils';
-import { SYSTEM_ROLES } from './constants';
+import { useCreateRole } from '~/data-provider';
 import { useLocalize } from '~/hooks';
-
-const TOP_LEVEL_VALUE = '';
 
 export default function CreateRoleDialog({
   open,
   onOpenChange,
+  parent,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
+  /** When set, the dialog adds a child of this role; otherwise it creates a top-level role. */
+  parent?: TAdminRole | null;
 }) {
   const localize = useLocalize();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [parentRole, setParentRole] = useState(TOP_LEVEL_VALUE);
   const mutation = useCreateRole();
-  const { data } = useAdminRoles();
-
-  const parentOptions = (data?.roles ?? []).filter((r) => !SYSTEM_ROLES.has(r.name));
 
   const reset = () => {
     setName('');
     setDescription('');
-    setParentRole(TOP_LEVEL_VALUE);
     mutation.reset();
   };
 
@@ -38,7 +34,7 @@ export default function CreateRoleDialog({
       {
         name: name.trim(),
         description: description.trim() || undefined,
-        parentRole: parentRole || null,
+        parentRole: parent?.roleKey ?? null,
       },
       {
         onSuccess: () => {
@@ -60,7 +56,11 @@ export default function CreateRoleDialog({
       }}
     >
       <OGDialogTemplate
-        title={localize('com_admin_access_create_title')}
+        title={
+          parent
+            ? localize('com_admin_role_add_under', { 0: parent.name })
+            : localize('com_admin_access_create_title')
+        }
         showCloseButton={false}
         className="w-11/12 md:max-w-md"
         main={
@@ -73,21 +73,12 @@ export default function CreateRoleDialog({
               {localize('com_admin_access_role_description')}
               <Input value={description} onChange={(e) => setDescription(e.target.value)} />
             </label>
-            <label className="flex flex-col gap-1 text-sm text-text-secondary">
-              {localize('com_admin_role_parent_label')}
-              <select
-                className="rounded-lg border border-border-light bg-surface-primary px-2 py-1.5 text-sm text-text-primary"
-                value={parentRole}
-                onChange={(e) => setParentRole(e.target.value)}
-              >
-                <option value={TOP_LEVEL_VALUE}>{localize('com_admin_role_top_level')}</option>
-                {parentOptions.map((role) => (
-                  <option key={role.name} value={role.name}>
-                    {role.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {parent ? (
+              <p className="text-sm text-text-secondary">
+                {localize('com_admin_role_parent_label')}:{' '}
+                <span className="text-text-primary">{parent.name}</span>
+              </p>
+            ) : null}
             {mutation.error ? (
               <p className="text-sm text-text-secondary">
                 {getResponseErrorMessage(mutation.error)}

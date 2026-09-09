@@ -24,9 +24,6 @@ const handlers = createAdminRolesHandlers({
   grantCapability: db.grantCapability,
   findUser: db.findUser,
   updateUser: db.updateUser,
-  updateUsersByRole: db.updateUsersByRole,
-  findUserIdsByRole: db.findUserIdsByRole,
-  updateUsersRoleByIds: db.updateUsersRoleByIds,
   listUsersByRole: db.listUsersByRole,
   countUsersByRole: db.countUsersByRole,
   deleteConfig: db.deleteConfig,
@@ -40,12 +37,12 @@ router.use(requireJwtAuth, requireAdminAccess);
 
 router.get('/', requireReadRoles, handlers.listRoles);
 router.post('/', requireManageRoles, handlers.createRole);
-router.get('/:name', requireReadRoles, handlers.getRole);
-router.patch('/:name', requireManageRoles, handlers.updateRole);
-router.delete('/:name', requireManageRoles, handlers.deleteRole);
-router.patch('/:name/permissions', requireManageRoles, handlers.updateRolePermissions);
-router.get('/:name/members', requireReadRoles, handlers.getRoleMembers);
-router.post('/:name/members', requireManageRoles, handlers.addRoleMember);
-router.delete('/:name/members/:userId', requireManageRoles, handlers.removeRoleMember);
+router.get('/:roleKey', requireReadRoles, handlers.getRole);
+router.patch('/:roleKey', requireManageRoles, handlers.updateRole);
+router.delete('/:roleKey', requireManageRoles, handlers.deleteRole);
+router.patch('/:roleKey/permissions', requireManageRoles, handlers.updateRolePermissions);
+router.get('/:roleKey/members', requireReadRoles, handlers.getRoleMembers);
+router.post('/:roleKey/members', requireManageRoles, handlers.addRoleMember);
+router.delete('/:roleKey/members/:userId', requireManageRoles, handlers.removeRoleMember);
 
 module.exports = router;

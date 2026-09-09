@@ -14,21 +14,25 @@ export default function UserRow({
   user,
   locale,
   onOpen,
-  manageableRoleNames,
+  manageableRoleKeys,
+  roleLabel,
 }: {
   user: AdminUserRow;
   locale: string;
   onOpen: () => void;
   /** Present only for a non-admin viewer with subordinate-management access;
-   *  renders a "Change role" select in place of the plain role badge. */
-  manageableRoleNames?: string[];
+   *  renders a "Change role" select in place of the plain role badge. Values are roleKeys. */
+  manageableRoleKeys?: string[];
+  /** Maps a roleKey to a display label; defaults to the key itself. */
+  roleLabel?: (roleKey: string) => string;
 }) {
   const localize = useLocalize();
   const setUserRole = useSetUserRole();
+  const label = roleLabel ?? ((key: string) => key);
   const created = user.createdAt
     ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(user.createdAt))
     : '—';
-  const canManageRole = manageableRoleNames != null && manageableRoleNames.length > 0;
+  const canManageRole = manageableRoleKeys != null && manageableRoleKeys.length > 0;
 
   const roleCell = canManageRole ? (
     <select
@@ -39,12 +43,12 @@ export default function UserRow({
       onClick={(e) => e.stopPropagation()}
       onChange={(e) => setUserRole.mutate({ userId: user.id, role: e.target.value })}
     >
-      {user.role && !manageableRoleNames?.includes(user.role) ? (
-        <option value={user.role}>{user.role}</option>
+      {user.role && !manageableRoleKeys?.includes(user.role) ? (
+        <option value={user.role}>{label(user.role)}</option>
       ) : null}
-      {manageableRoleNames?.map((roleName) => (
-        <option key={roleName} value={roleName}>
-          {roleName}
+      {manageableRoleKeys?.map((roleKey) => (
+        <option key={roleKey} value={roleKey}>
+          {label(roleKey)}
         </option>
       ))}
     </select>
@@ -53,7 +57,7 @@ export default function UserRow({
   const roleBadge =
     !canManageRole && user.role ? (
       <span className="rounded-full bg-surface-tertiary px-2 py-0.5 text-[10px] font-medium text-text-secondary">
-        {user.role}
+        {label(user.role)}
       </span>
     ) : null;
 
