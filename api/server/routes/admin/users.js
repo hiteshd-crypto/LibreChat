@@ -36,7 +36,7 @@ const { requireSubordinateAccess, attachHierarchyScope } = createHierarchyMiddle
   hasCapability,
   findUsers: db.findUsers,
   canViewRole: db.canViewRole,
-  getDescendantRoleNames: db.getDescendantRoleNames,
+  getDescendantRoleKeys: db.getDescendantRoleKeys,
 });
 
 const handlers = createAdminUsersHandlers({

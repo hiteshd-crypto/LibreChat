@@ -33,6 +33,6 @@ export type ServerRequest = Request<unknown, unknown, RequestBody> & {
   /** Passport strategy that populated req.user for this request. */
   authStrategy?: string;
   /** Set by `attachHierarchyScope` for a non-ADMIN, non-READ_USERS caller: the role
-   *  names they may see. `null` means unscoped (ADMIN or a generic READ_USERS grant). */
-  hierarchyScope?: { viewableRoleNames: string[] } | null;
+   *  keys they may see. `null` means unscoped (ADMIN or a generic READ_USERS grant). */
+  hierarchyScope?: { viewableRoleKeys: string[] } | null;
 };

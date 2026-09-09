@@ -6,7 +6,7 @@ import type { ServerRequest } from '~/types/http';
 
 export interface AdminHierarchyDeps {
   hasCapability: HasCapabilityFn;
-  getDescendantRoleNames: (roleName: string) => Promise<string[]>;
+  getDescendantRoleKeys: (roleKey: string) => Promise<string[]>;
 }
 
 /**
@@ -17,7 +17,7 @@ export interface AdminHierarchyDeps {
 export function createAdminHierarchyHandlers(deps: AdminHierarchyDeps): {
   getMyHierarchy: (req: ServerRequest, res: Response) => Promise<Response>;
 } {
-  const { hasCapability, getDescendantRoleNames } = deps;
+  const { hasCapability, getDescendantRoleKeys } = deps;
 
   async function getMyHierarchy(req: ServerRequest, res: Response) {
     try {
@@ -40,8 +40,8 @@ export function createAdminHierarchyHandlers(deps: AdminHierarchyDeps): {
         return res.status(200).json({
           isAdmin: true,
           canViewSubordinates: true,
-          viewableRoleNames: [],
-          manageableRoleNames: [],
+          viewableRoleKeys: [],
+          manageableRoleKeys: [],
         });
       }
 
@@ -49,13 +49,13 @@ export function createAdminHierarchyHandlers(deps: AdminHierarchyDeps): {
         capabilityUser,
         SystemCapabilities.VIEW_SUBORDINATES,
       );
-      const roleNames = canViewSubordinates ? await getDescendantRoleNames(role) : [];
+      const roleKeys = canViewSubordinates ? await getDescendantRoleKeys(role) : [];
 
       return res.status(200).json({
         isAdmin: false,
         canViewSubordinates,
-        viewableRoleNames: roleNames,
-        manageableRoleNames: roleNames,
+        viewableRoleKeys: roleKeys,
+        manageableRoleKeys: roleKeys,
       });
     } catch (error) {
       logger.error('[adminHierarchy] getMyHierarchy error:', error);

@@ -12,8 +12,8 @@ export interface HierarchyDeps {
     fieldsToSelect?: string | string[] | null,
     options?: { limit?: number; offset?: number; sort?: Record<string, 1 | -1> },
   ) => Promise<IUser[]>;
-  canViewRole: (actorRole: string, targetRole: string) => Promise<boolean>;
-  getDescendantRoleNames: (roleName: string) => Promise<string[]>;
+  canViewRole: (actorKey: string, targetKey: string) => Promise<boolean>;
+  getDescendantRoleKeys: (roleKey: string) => Promise<string[]>;
 }
 
 type HierarchyMiddleware = (req: ServerRequest, res: Response, next: NextFunction) => Promise<void>;
@@ -44,7 +44,7 @@ export function createHierarchyMiddleware(deps: HierarchyDeps): {
   requireSubordinateAccess: HierarchyMiddleware;
   attachHierarchyScope: HierarchyMiddleware;
 } {
-  const { hasCapability, findUsers, canViewRole, getDescendantRoleNames } = deps;
+  const { hasCapability, findUsers, canViewRole, getDescendantRoleKeys } = deps;
 
   const requireSubordinateAccess: HierarchyMiddleware = async (req, res, next) => {
     try {
@@ -101,7 +101,7 @@ export function createHierarchyMiddleware(deps: HierarchyDeps): {
       }
       if (await hasCapability(user, SystemCapabilities.VIEW_SUBORDINATES)) {
         req.hierarchyScope = {
-          viewableRoleNames: await getDescendantRoleNames(user.role),
+          viewableRoleKeys: await getDescendantRoleKeys(user.role),
         };
         next();
         return;

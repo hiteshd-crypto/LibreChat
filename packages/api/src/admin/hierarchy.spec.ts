@@ -16,11 +16,11 @@ const capabilityHeld = (cap: string) => (_user: unknown, requested: string) =>
   Promise.resolve(requested === cap);
 
 describe('createAdminHierarchyHandlers', () => {
-  it('returns full access for ADMIN without calling getDescendantRoleNames', async () => {
-    const getDescendantRoleNames = jest.fn();
+  it('returns full access for ADMIN without calling getDescendantRoleKeys', async () => {
+    const getDescendantRoleKeys = jest.fn();
     const handlers = createAdminHierarchyHandlers({
       hasCapability: jest.fn().mockResolvedValue(true),
-      getDescendantRoleNames,
+      getDescendantRoleKeys,
     });
     const { req, res, json } = createReqRes({ id: 'admin-1', role: SystemRoles.ADMIN });
 
@@ -29,16 +29,16 @@ describe('createAdminHierarchyHandlers', () => {
     expect(json).toHaveBeenCalledWith({
       isAdmin: true,
       canViewSubordinates: true,
-      viewableRoleNames: [],
-      manageableRoleNames: [],
+      viewableRoleKeys: [],
+      manageableRoleKeys: [],
     });
-    expect(getDescendantRoleNames).not.toHaveBeenCalled();
+    expect(getDescendantRoleKeys).not.toHaveBeenCalled();
   });
 
   it('returns descendant role names for a VIEW_SUBORDINATES holder', async () => {
     const handlers = createAdminHierarchyHandlers({
       hasCapability: jest.fn(capabilityHeld(SystemCapabilities.VIEW_SUBORDINATES)),
-      getDescendantRoleNames: jest.fn().mockResolvedValue(['SALES_EMPLOYEE']),
+      getDescendantRoleKeys: jest.fn().mockResolvedValue(['SALES_EMPLOYEE']),
     });
     const { req, res, json } = createReqRes({ id: 'mgr-1', role: 'SALES_MANAGER' });
 
@@ -47,16 +47,16 @@ describe('createAdminHierarchyHandlers', () => {
     expect(json).toHaveBeenCalledWith({
       isAdmin: false,
       canViewSubordinates: true,
-      viewableRoleNames: ['SALES_EMPLOYEE'],
-      manageableRoleNames: ['SALES_EMPLOYEE'],
+      viewableRoleKeys: ['SALES_EMPLOYEE'],
+      manageableRoleKeys: ['SALES_EMPLOYEE'],
     });
   });
 
   it('returns empty access for a plain USER', async () => {
-    const getDescendantRoleNames = jest.fn();
+    const getDescendantRoleKeys = jest.fn();
     const handlers = createAdminHierarchyHandlers({
       hasCapability: jest.fn().mockResolvedValue(false),
-      getDescendantRoleNames,
+      getDescendantRoleKeys,
     });
     const { req, res, json } = createReqRes({ id: 'u-1', role: SystemRoles.USER });
 
@@ -65,16 +65,16 @@ describe('createAdminHierarchyHandlers', () => {
     expect(json).toHaveBeenCalledWith({
       isAdmin: false,
       canViewSubordinates: false,
-      viewableRoleNames: [],
-      manageableRoleNames: [],
+      viewableRoleKeys: [],
+      manageableRoleKeys: [],
     });
-    expect(getDescendantRoleNames).not.toHaveBeenCalled();
+    expect(getDescendantRoleKeys).not.toHaveBeenCalled();
   });
 
   it('returns 401 when unauthenticated', async () => {
     const handlers = createAdminHierarchyHandlers({
       hasCapability: jest.fn(),
-      getDescendantRoleNames: jest.fn(),
+      getDescendantRoleKeys: jest.fn(),
     });
     const { req, res, status } = createReqRes(undefined);
 
