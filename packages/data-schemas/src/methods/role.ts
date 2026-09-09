@@ -186,6 +186,31 @@ export function createRoleMethods(
     }
     const knownKeys = new Set(keyByName.values());
 
+    /**
+     * Fast path for a boot after the migration already ran: every role is keyed,
+     * no `parentRole` still holds a name, and no user / grant still references a
+     * custom role by name. Skips ~one query per custom role on every restart.
+     */
+    const customNames = rawRoles
+      .filter((role) => !isSystemRoleName(role.name) && keyByName.get(role.name) !== role.name)
+      .map((role) => role.name);
+    const parentLinksPending = rawRoles.some((role) => {
+      const parent = role.parentRole as string | null | undefined;
+      return !!parent && keyByName.has(parent) && !knownKeys.has(parent);
+    });
+    if (needsKey.length === 0 && !parentLinksPending && customNames.length > 0) {
+      const nameFilter = { principalType: 'role', principalId: { $in: customNames } };
+      const [staleUsers, staleGrants, staleConfigs, staleAcl] = await Promise.all([
+        User.collection.countDocuments({ role: { $in: customNames } }),
+        mongoose.connection.collection('systemgrants').countDocuments(nameFilter),
+        mongoose.connection.collection('configs').countDocuments(nameFilter),
+        mongoose.connection.collection('aclentries').countDocuments(nameFilter),
+      ]);
+      if (staleUsers === 0 && staleGrants === 0 && staleConfigs === 0 && staleAcl === 0) {
+        return { keyed: 0, parentLinks: 0, users: 0, principals: 0, dryRun, planned };
+      }
+    }
+
     for (const role of needsKey) {
       const key = keyByName.get(role.name) as string;
       planned.push(`role "${role.name}" → roleKey ${key}`);

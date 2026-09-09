@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { OGDialog, OGDialogTemplate, Button, Spinner } from '@librechat/client';
 import type { TAdminRole } from 'librechat-data-provider';
 import { descendantKeys, reparentBlock } from './reparent';
@@ -26,6 +26,13 @@ export default function MoveRoleDialog({
   const localize = useLocalize();
   const mutation = useSetRoleParent();
   const [picked, setPicked] = useState('');
+
+  const moveRoleKey = move?.role.roleKey;
+  useEffect(() => {
+    setPicked('');
+    mutation.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveRoleKey]);
 
   if (!move) {
     return null;

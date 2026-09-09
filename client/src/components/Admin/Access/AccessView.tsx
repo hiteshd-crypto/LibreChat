@@ -45,7 +45,10 @@ function DraggableRoleRow({
   onEdit: () => void;
   onAdd: () => void;
   onKeyboardMove: () => void;
-  onHoverBlocked: (reason: 'cross-branch' | 'name-clash', targetName: string) => void;
+  onHoverBlocked: (
+    reason: 'cross-branch' | 'name-clash',
+    dragged: { name: string; rootKey: string },
+  ) => void;
   onValidDrop: (sourceKey: string, targetKey: string) => void;
 }) {
   const handleRef = useRef<HTMLButtonElement | null>(null);
@@ -65,7 +68,7 @@ function DraggableRoleRow({
       }
       const block = reparentBlock(roles, item.roleKey, role.roleKey);
       if (block === 'cross-branch' || block === 'name-clash') {
-        onHoverBlocked(block, role.name);
+        onHoverBlocked(block, { name: item.name, rootKey: item.rootKey });
       }
     },
     drop: (item, monitor) => {
@@ -172,13 +175,16 @@ export default function AccessView() {
               setDropNotice(null);
               setMoveTarget({ role });
             }}
-            onHoverBlocked={(reason, targetName) =>
+            onHoverBlocked={(reason, dragged) =>
               setDropNotice(
                 reason === 'cross-branch'
                   ? localize('com_admin_role_move_out_of_branch', {
-                      0: maps.byKey.get(maps.rootKeyByKey.get(role.roleKey) ?? '')?.name ?? '',
+                      0: maps.byKey.get(dragged.rootKey)?.name ?? '',
                     })
-                  : localize('com_admin_role_move_name_clash', { 0: role.name, 1: targetName }),
+                  : localize('com_admin_role_move_name_clash', {
+                      0: dragged.name,
+                      1: role.name,
+                    }),
               )
             }
             onValidDrop={(sourceKey, targetKey) => {
