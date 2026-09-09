@@ -4,6 +4,7 @@ const { logger } = require('@librechat/data-schemas');
 require('module-alias')({ base: path.resolve(__dirname, '..', 'api') });
 const connect = require('./connect');
 
+require('~/db/models'); // registers mongoose models (createModels)
 const db = require('~/models');
 
 /**
