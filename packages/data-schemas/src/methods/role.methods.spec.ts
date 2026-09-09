@@ -85,6 +85,19 @@ beforeEach(async () => {
   delete process.env.AUTH_USER_CACHE_MODE;
 });
 
+describe('roleKey', () => {
+  it('mints roleKey = name for a system role and = _id for a custom role', async () => {
+    await initializeRoles();
+    const admin = await Role.findOne({ name: SystemRoles.ADMIN }).lean();
+    expect(admin?.roleKey).toBe(SystemRoles.ADMIN);
+
+    const custom = await createRoleByName({ name: 'ROLEKEY_CUSTOM' });
+    const stored = await Role.findOne({ name: 'ROLEKEY_CUSTOM' }).lean();
+    expect(stored?.roleKey).toBe(String(stored?._id));
+    expect(custom.roleKey).toBe(String(custom._id));
+  });
+});
+
 describe('findRolesByNames', () => {
   it('queries storage without reading or writing the role cache', async () => {
     await Role.create([
