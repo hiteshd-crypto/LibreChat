@@ -39,7 +39,7 @@ beforeEach(() => jest.clearAllMocks());
 describe('useAdminRoles', () => {
   it('fetches the role list', async () => {
     listAdminRoles.mockResolvedValue({
-      roles: [{ name: 'ADMIN' }],
+      roles: [{ roleKey: 'ADMIN', name: 'ADMIN' }],
       total: 1,
       limit: 200,
       offset: 0,
@@ -55,13 +55,13 @@ describe('useMyHierarchy', () => {
     getMyHierarchy.mockResolvedValue({
       isAdmin: false,
       canViewSubordinates: true,
-      viewableRoleNames: ['SALES_EMPLOYEE'],
-      manageableRoleNames: ['SALES_EMPLOYEE'],
+      viewableRoleKeys: ['SALES_EMPLOYEE'],
+      manageableRoleKeys: ['SALES_EMPLOYEE'],
     });
     const { result } = renderHook(() => useMyHierarchy(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.canViewSubordinates).toBe(true);
-    expect(result.current.data?.viewableRoleNames).toEqual(['SALES_EMPLOYEE']);
+    expect(result.current.data?.viewableRoleKeys).toEqual(['SALES_EMPLOYEE']);
   });
 });
 

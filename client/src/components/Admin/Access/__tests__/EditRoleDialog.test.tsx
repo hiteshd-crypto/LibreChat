@@ -1,9 +1,10 @@
 import userEvent from '@testing-library/user-event';
 import { render, screen } from '@testing-library/react';
+import type { TAdminRole } from 'librechat-data-provider';
 import EditRoleDialog from '../EditRoleDialog';
 
 const mockUpdate = jest.fn();
-const mockSetParent = jest.fn();
+const mockDelete = jest.fn();
 
 /** react-query v4 mutation stub — the dialog uses `mutateAsync`. */
 const idle = (fn: jest.Mock) => ({
@@ -16,9 +17,7 @@ const idle = (fn: jest.Mock) => ({
 
 jest.mock('~/data-provider', () => ({
   useUpdateRole: () => idle(mockUpdate),
-  useDeleteRole: () => idle(jest.fn()),
-  useSetRoleParent: () => idle(mockSetParent),
-  useAdminRoles: () => ({ data: { roles: [{ name: 'SUPERVISOR' }, { name: 'support' }] } }),
+  useDeleteRole: () => idle(mockDelete),
   useAdminRoleMembers: () => ({ data: { members: [], total: 0 }, isLoading: false }),
   useAdminUserSearch: () => ({ data: { users: [] } }),
   useAddRoleMember: () => idle(jest.fn()),
@@ -47,79 +46,82 @@ jest.mock('@librechat/client', () => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockUpdate.mockResolvedValue({ role: {} });
-  mockSetParent.mockResolvedValue({ role: {} });
 });
+
+const role = (overrides: Partial<TAdminRole>): TAdminRole =>
+  ({ roleKey: overrides.name ?? 'k', name: 'support', ...overrides }) as TAdminRole;
 
 const getInput = (label: string) =>
   screen.getByText(label).closest('label')!.querySelector('input') as HTMLInputElement;
 
 describe('EditRoleDialog', () => {
-  it('sends an empty description so an existing one can be cleared', async () => {
-    render(<EditRoleDialog role={{ name: 'support', description: 'temp' }} onClose={jest.fn()} />);
-    const desc = getInput('com_admin_access_role_description');
-    await userEvent.clear(desc);
+  it('sends an empty description so an existing one can be cleared, keyed by roleKey', async () => {
+    render(
+      <EditRoleDialog role={role({ name: 'support', description: 'temp' })} onClose={jest.fn()} />,
+    );
+    await userEvent.clear(getInput('com_admin_access_role_description'));
     await userEvent.click(screen.getByText('com_ui_save'));
     expect(mockUpdate).toHaveBeenCalledWith({
-      name: 'support',
+      roleKey: 'support',
       updates: { name: undefined, description: '' },
     });
   });
 
   it('does nothing but close when nothing changed', async () => {
     const onClose = jest.fn();
-    render(<EditRoleDialog role={{ name: 'support', description: 'temp' }} onClose={onClose} />);
+    render(
+      <EditRoleDialog role={role({ name: 'support', description: 'temp' })} onClose={onClose} />,
+    );
     await userEvent.click(screen.getByText('com_ui_save'));
     expect(mockUpdate).not.toHaveBeenCalled();
-    expect(mockSetParent).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
 
   it('disables the name field for a system role', () => {
-    render(<EditRoleDialog role={{ name: 'ADMIN' }} onClose={jest.fn()} />);
+    render(<EditRoleDialog role={role({ name: 'ADMIN' })} onClose={jest.fn()} />);
     expect(getInput('com_admin_access_role_name')).toBeDisabled();
   });
 
   it('shows the Members tab for ADMIN', () => {
-    render(<EditRoleDialog role={{ name: 'ADMIN' }} onClose={jest.fn()} />);
+    render(<EditRoleDialog role={role({ name: 'ADMIN' })} onClose={jest.fn()} />);
     expect(screen.getByText('com_admin_access_tab_members')).toBeInTheDocument();
   });
 
   it('hides the Members tab for the USER role and explains why', () => {
-    render(<EditRoleDialog role={{ name: 'USER' }} onClose={jest.fn()} />);
+    render(<EditRoleDialog role={role({ name: 'USER' })} onClose={jest.fn()} />);
     expect(screen.queryByText('com_admin_access_tab_members')).not.toBeInTheDocument();
     expect(screen.getByText('com_admin_access_user_role_note')).toBeInTheDocument();
   });
 
-  it('re-parents a custom role from the single Save button', async () => {
-    const onClose = jest.fn();
-    render(<EditRoleDialog role={{ name: 'support', parentRole: null }} onClose={onClose} />);
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'SUPERVISOR');
-    await userEvent.click(screen.getByText('com_ui_save'));
-    expect(mockSetParent).toHaveBeenCalledWith({ name: 'support', parentRole: 'SUPERVISOR' });
-    expect(mockUpdate).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it('saves a parent change and a description change together', async () => {
+  it('shows "Reports to" as a static label, not a control, and never re-parents on save', async () => {
     render(
       <EditRoleDialog
-        role={{ name: 'support', description: 'old', parentRole: null }}
+        role={role({ name: 'support', parentRole: 'p1' })}
+        parentName="SALES_MANAGER"
         onClose={jest.fn()}
       />,
     );
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'SUPERVISOR');
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByText('SALES_MANAGER')).toBeInTheDocument();
+
     await userEvent.clear(getInput('com_admin_access_role_description'));
     await userEvent.type(getInput('com_admin_access_role_description'), 'new');
     await userEvent.click(screen.getByText('com_ui_save'));
-    expect(mockSetParent).toHaveBeenCalledWith({ name: 'support', parentRole: 'SUPERVISOR' });
     expect(mockUpdate).toHaveBeenCalledWith({
-      name: 'support',
+      roleKey: 'support',
       updates: { name: undefined, description: 'new' },
     });
   });
 
-  it('hides the Reports-to control for a system role', () => {
-    render(<EditRoleDialog role={{ name: 'ADMIN' }} onClose={jest.fn()} />);
-    expect(screen.queryByText('com_admin_role_parent_label')).not.toBeInTheDocument();
+  it('shows "Top-level branch" when the role has no parent', () => {
+    render(
+      <EditRoleDialog role={role({ name: 'support', parentRole: null })} onClose={jest.fn()} />,
+    );
+    expect(screen.getByText('com_admin_role_top_level')).toBeInTheDocument();
+  });
+
+  it('hides the Reports-to line for a system role', () => {
+    render(<EditRoleDialog role={role({ name: 'ADMIN' })} onClose={jest.fn()} />);
+    expect(screen.queryByText('com_admin_role_parent_label:')).not.toBeInTheDocument();
   });
 });

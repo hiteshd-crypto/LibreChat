@@ -15,7 +15,7 @@ import { useLocalize } from '~/hooks';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
-export default function RoleMembersPanel({ roleName }: { roleName: string }) {
+export default function RoleMembersPanel({ roleKey }: { roleKey: string }) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const [page, setPage] = useState(1);
@@ -27,14 +27,14 @@ export default function RoleMembersPanel({ roleName }: { roleName: string }) {
     return () => clearTimeout(id);
   }, [searchInput]);
 
-  const membersQuery = useAdminRoleMembers(roleName, page);
+  const membersQuery = useAdminRoleMembers(roleKey, page);
   const searchQuery = useAdminUserSearch(search);
   const addMutation = useAddRoleMember();
   const removeMutation = useRemoveRoleMember();
 
   const addMember = (userId: string, name: string) =>
     addMutation.mutate(
-      { roleName, userId },
+      { roleKey, userId },
       {
         onSuccess: () =>
           showToast({ message: localize('com_admin_access_member_added', { 0: name }) }),
@@ -48,7 +48,7 @@ export default function RoleMembersPanel({ roleName }: { roleName: string }) {
 
   const removeMember = (userId: string, name: string) =>
     removeMutation.mutate(
-      { roleName, userId },
+      { roleKey, userId },
       {
         onSuccess: () =>
           showToast({ message: localize('com_admin_access_member_removed', { 0: name }) }),

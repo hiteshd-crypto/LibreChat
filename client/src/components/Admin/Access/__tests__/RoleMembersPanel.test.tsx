@@ -39,11 +39,11 @@ beforeEach(() => {
 
 describe('RoleMembersPanel', () => {
   it('lists members and calls remove on click', async () => {
-    render(<RoleMembersPanel roleName="ADMIN" />);
+    render(<RoleMembersPanel roleKey="ADMIN" />);
     expect(screen.getByText('Ann')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /com_admin_access_remove_member/ }));
     expect(mockRemove).toHaveBeenCalledWith(
-      { roleName: 'ADMIN', userId: 'u1' },
+      { roleKey: 'ADMIN', userId: 'u1' },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     );
   });
@@ -54,7 +54,7 @@ describe('RoleMembersPanel', () => {
       message: 'Request failed with status code 400',
       response: { data: { error: 'Cannot remove the last admin user' } },
     };
-    render(<RoleMembersPanel roleName="ADMIN" />);
+    render(<RoleMembersPanel roleKey="ADMIN" />);
     expect(screen.getByText('Cannot remove the last admin user')).toBeInTheDocument();
     expect(screen.queryByText('Request failed with status code 400')).not.toBeInTheDocument();
   });

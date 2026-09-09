@@ -1,9 +1,9 @@
 import userEvent from '@testing-library/user-event';
 import { render, screen } from '@testing-library/react';
+import type { TAdminRole } from 'librechat-data-provider';
 import CreateRoleDialog from '../CreateRoleDialog';
 
 const mockCreateMutate = jest.fn();
-const mockUseAdminRoles = jest.fn();
 
 jest.mock('~/data-provider', () => ({
   useCreateRole: () => ({
@@ -12,11 +12,11 @@ jest.mock('~/data-provider', () => ({
     isLoading: false,
     error: null,
   }),
-  useAdminRoles: () => mockUseAdminRoles(),
 }));
 
 jest.mock('~/hooks', () => ({
-  useLocalize: () => (key: string) => key,
+  useLocalize: () => (key: string, vars?: Record<string, unknown>) =>
+    vars ? `${key}:${JSON.stringify(vars)}` : key,
 }));
 
 jest.mock('~/utils', () => ({
@@ -37,44 +37,33 @@ jest.mock('@librechat/client', () => ({
   ),
 }));
 
+const parent = (name: string): TAdminRole => ({ roleKey: `${name}-key`, name, parentRole: null });
+
 beforeEach(() => jest.clearAllMocks());
 
 describe('CreateRoleDialog', () => {
-  it('offers a top-level option plus every non-system role as a parent', () => {
-    mockUseAdminRoles.mockReturnValue({
-      data: { roles: [{ name: 'ADMIN' }, { name: 'USER' }, { name: 'SUPERVISOR', depth: 0 }] },
-    });
+  it('has no parent picker and creates a top-level role with parentRole null', async () => {
     render(<CreateRoleDialog open onOpenChange={() => {}} />);
-    const options = screen.getAllByRole('option').map((o) => o.textContent);
-    expect(options).toEqual(expect.arrayContaining(['com_admin_role_top_level', 'SUPERVISOR']));
-    expect(options).not.toContain('ADMIN');
-    expect(options).not.toContain('USER');
-  });
-
-  it('submits with the selected parentRole', async () => {
-    mockUseAdminRoles.mockReturnValue({ data: { roles: [{ name: 'SUPERVISOR', depth: 0 }] } });
-    render(<CreateRoleDialog open onOpenChange={() => {}} />);
-
-    const inputs = screen.getAllByRole('textbox');
-    await userEvent.type(inputs[0], 'SALES_MANAGER');
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'SUPERVISOR');
-    await userEvent.click(screen.getByText('com_ui_create'));
-
-    expect(mockCreateMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'SALES_MANAGER', parentRole: 'SUPERVISOR' }),
-      expect.any(Object),
-    );
-  });
-
-  it('submits a top-level role with parentRole null', async () => {
-    mockUseAdminRoles.mockReturnValue({ data: { roles: [] } });
-    render(<CreateRoleDialog open onOpenChange={() => {}} />);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
     await userEvent.type(screen.getAllByRole('textbox')[0], 'SUPERVISOR');
     await userEvent.click(screen.getByText('com_ui_create'));
 
     expect(mockCreateMutate).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'SUPERVISOR', parentRole: null }),
+      expect.any(Object),
+    );
+  });
+
+  it('in add-under mode shows the parent name and submits its roleKey', async () => {
+    render(<CreateRoleDialog open onOpenChange={() => {}} parent={parent('SALES_MANAGER')} />);
+    expect(screen.getByText('SALES_MANAGER')).toBeInTheDocument();
+
+    await userEvent.type(screen.getAllByRole('textbox')[0], 'CHILD');
+    await userEvent.click(screen.getByText('com_ui_create'));
+
+    expect(mockCreateMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'CHILD', parentRole: 'SALES_MANAGER-key' }),
       expect.any(Object),
     );
   });
