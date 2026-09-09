@@ -43,9 +43,10 @@ and a stable reference that survives a rename without a bulk user migration.
 
 - A role is referenced by an **immutable key**, not its name. Renaming a role
   touches one document.
-- **Duplicate role names are allowed** — with two exceptions: the reserved
-  names `ADMIN` / `USER`, and **top-level roles** (each branch root's name stays
-  unique).
+- **Duplicate role names are allowed** — with three exceptions: the reserved
+  names `ADMIN` / `USER`, **top-level roles** (each branch root's name stays
+  unique), and **direct siblings** (two roles under the same immediate parent
+  cannot share a name). A name may repeat freely across different parents.
 - The Access tab editing model becomes explicit:
   - "Create role" (top of tab) creates a **top-level** role only.
   - Each role row (except `ADMIN` / `USER`) has an **Add child** (`+`) and an
@@ -108,17 +109,17 @@ roleSchema.index({ name: 1, tenantId: 1 }, { unique: true });
 
 // added:
 roleSchema.index({ roleKey: 1, tenantId: 1 }, { unique: true });
-roleSchema.index(
-  { name: 1, tenantId: 1 },
-  { unique: true, partialFilterExpression: { parentRole: null } },
-);
+roleSchema.index({ parentRole: 1, name: 1, tenantId: 1 }, { unique: true });
 ```
 
 - `{ roleKey, tenantId }` unique — the new identity constraint.
-- `{ name, tenantId }` unique **only where `parentRole` is null** — enforces
-  "top-level role names stay unique" while allowing duplicates among child
-  roles. (`parentRole` has `default: null`, so every top-level role has an
-  explicit `null` and is covered by the partial filter.)
+- `{ parentRole, name, tenantId }` unique — one index enforces **both**
+  remaining name rules: two top-level roles collide on
+  `{ null, name, tenantId }`, and two children of the same parent collide on
+  `{ parentKey, name, tenantId }`. Children of *different* parents produce
+  different index entries and coexist. (`parentRole` has `default: null`, so
+  every top-level role carries an explicit `null`; a missing `tenantId` indexes
+  as `null`.)
 - The plain `{ name: 1 }` field index (`name: { ..., index: true }`) stays for
   search.
 
@@ -127,7 +128,7 @@ roleSchema.index(
 | Field | Before | After |
 |---|---|---|
 | `role.roleKey` | — | new; immutable identifier (§3.1) |
-| `role.name` | unique per tenant | display label; unique **only** among top-level roles and vs. `ADMIN`/`USER` |
+| `role.name` | unique per tenant | display label; unique among top-level roles, among direct siblings, and vs. `ADMIN`/`USER` |
 | `role.parentRole` | parent's `name` | parent's `roleKey` (`null` = top-level) |
 | `role.depth` | unchanged | unchanged |
 | `user.role` | role `name` | role `roleKey` (still `String`; `"ADMIN"`/`"USER"` unchanged for system users) |
@@ -178,11 +179,18 @@ maps built in step 2 are unambiguous):
    remapped, N grants/configs/acl entries remapped.
 
 Forward-only. Every step is a bulk rename reversible via `nameByKey` if the
-operator needs to back it out on staging. Add the drop of the old
-`{ name, tenantId }` unique index / creation of the new indexes (§3.2) as a
-guarded step here as well (Mongoose builds the new indexes on boot; the stale
-unique index must be dropped explicitly — `Role.collection.dropIndex('name_1_tenantId_1')`,
-ignoring "index not found").
+operator needs to back it out on staging.
+
+**Index handling** (bracketing the steps above):
+
+- **Before step 1** — drop the stale `name_1_tenantId_1` unique index
+  (`Role.collection.dropIndex('name_1_tenantId_1')`, ignore "index not found").
+  Otherwise a `user.role`-independent rename later trips it.
+- **After step 3** — now that every `parentRole` holds a key, create
+  `{ parentRole, name, tenantId }` unique explicitly rather than relying on
+  Mongoose `autoIndex` timing; a half-rewritten `parentRole` set could
+  otherwise fail the index build on a transient duplicate. Create
+  `{ roleKey, tenantId }` unique here too.
 
 ---
 
@@ -209,9 +217,10 @@ The resolver already reads a fresh graph on every call. Changes:
   permissions route — which only ever touches `ADMIN`/`USER`, where key===name).
 - `createRoleByName(roleData)`:
   - mint `roleKey` = `_id.toString()` of the new doc;
-  - **drop** the name-uniqueness pre-check;
-  - when `parentRole == null` (top-level): reject if another top-level role
-    already has this `name` (`RoleConflictError`); the partial unique index is
+  - **drop** the global name-uniqueness pre-check;
+  - reject if a role with the same `name` **and** the same `parentRole`
+    (`null` included → another top-level role) already exists
+    (`RoleConflictError`); the `{ parentRole, name, tenantId }` unique index is
     the backstop (11000 → `RoleConflictError`).
   - when `parentRole` is set: validate the parent key exists and is not a
     system role; `depth = parent.depth + 1`.
@@ -219,11 +228,15 @@ The resolver already reads a fresh graph on every call. Changes:
   branch-isolation guard**: compute the top-level root of `roleKey`'s current
   position and of `newParentKey`; if they differ, throw
   `RoleConflictError('cannot move a role to a different branch')`. Keep the
-  cycle guard. `newParentKey === null` is rejected by this guard for any
+  cycle guard. Also reject if `newParentKey` already has a different child
+  whose `name` equals the moved role's `name` (`RoleConflictError`).
+  `newParentKey === null` is rejected by the branch-isolation guard for any
   non-top-level role (null has no root) and is a no-op for a top-level role.
 - `updateRoleByName` rename path collapses to `Role.findOneAndUpdate({ roleKey },
   { $set: { name } })` — **remove** `repointChildRoles` (children hold the key)
-  and the user-migration coupling.
+  and the user-migration coupling. Pre-check: reject the rename if a sibling
+  under the same `parentRole` already has the target name
+  (`RoleConflictError`); the unique index is the backstop.
 - `deleteRoleByName` → keyed by roleKey: `User.updateMany({ role: roleKey },
   { $set: { role: SystemRoles.USER } })`, child check `{ parentRole: roleKey }`,
   cascade cleanup `principalId: roleKey`.
@@ -242,13 +255,16 @@ The resolver already reads a fresh graph on every call. Changes:
   case-insensitive) **or** a 24-hex string.
 - All handlers key by `roleKey`.
 - **`createRole`** — `parentRole` in the body is a `roleKey` or `null`:
-  - `null` → top-level; the handler pre-checks top-level name collision → 409.
-  - a key → validated to exist and be non-system (400 otherwise).
+  - `null` → top-level; a key → validated to exist and be non-system (400).
+  - the handler pre-checks a name collision among the target parent's existing
+    children (or among top-level roles when `parentRole` is `null`) → 409.
   - still auto-grants `VIEW_SUBORDINATES` with `principalId: role.roleKey`.
 - **`updateRole`** — the re-parent branch (`body.parentRole !== undefined`)
-  calls `setRoleParent(roleKey, newParentKey)`; `RoleConflictError` (cycle or
-  cross-branch) → 400. The rename path is a plain `name` set; **remove** the
-  duplicate-name 409 guard, `renameRole`, `rollbackMigratedUsers`.
+  calls `setRoleParent(roleKey, newParentKey)`; `RoleConflictError` (cycle,
+  cross-branch, or a name clash with an existing child of the new parent)
+  → 400. The rename path is a plain `name` set guarded by a sibling-collision
+  pre-check (→ 409); **remove** `renameRole`, `rollbackMigratedUsers`, and the
+  old global duplicate-name guard.
 - **`deleteRole`** — child-count 409 guard and cascade cleanup, all keyed by
   `roleKey`; audit `target.id` = roleKey.
 - `RESERVED_ROLE_NAMES` (`members`, `permissions`) can be dropped — a `roleKey`
@@ -291,6 +307,7 @@ The resolver already reads a fresh graph on every call. Changes:
     Surfaces the 409 "a top-level role named X already exists".
   - **present** → title "Add role under **{parent.name}**"; a read-only
     `Parent: {parent.name}` line; submits `parentRole: parent.roleKey`.
+    Surfaces the 409 "a role named X already exists under {parent}".
 
 ### 7.2 `RoleRow` action buttons (item 2)
 
@@ -323,12 +340,19 @@ The resolver already reads a fresh graph on every call. Changes:
   - `item.rootKey === targetRootKey` (same top-level branch),
   - the target is not the dragged role itself,
   - the target is not a descendant of the dragged role (no cycle),
-  - the target is not the dragged role's current parent (no-op).
+  - the target is not the dragged role's current parent (no-op),
+  - the target has no existing child whose name equals the dragged role's name
+    (sibling uniqueness).
 - **Crossing the branch boundary**: while a drag is active and the pointer is
   over a row in a different branch, an inline notice renders near the tree —
   *"Can't move outside the {rootName} branch"* (new key
   `com_admin_role_move_out_of_branch`) — cleared when the pointer returns to a
   valid target or the drag ends. Drop does nothing there.
+- **Name clash**: when the hovered target is a valid branch position but
+  already has a child with the dragged role's name, the notice reads
+  *"A role named {name} already exists under {target}"*
+  (`com_admin_role_move_name_clash`); drop does nothing. The server rejects it
+  too (`setRoleParent` → 400) as a backstop.
 - **On a valid drop**: a confirmation dialog —
   *"Move **{role}** under **{newParent}**? Its {n} sub-role(s) move with it."*
   (`com_admin_role_move_confirm`). Confirm → `useSetRoleParent({ roleKey,
@@ -361,7 +385,11 @@ buildRoleLabels(roles: TAdminRole[]): Map<string /* roleKey */, string>
 
 - default label = `role.name`;
 - for any `name` shared by ≥2 roles in the input, those roles get
-  `` `${name} — ${parentName}` `` (walk one more level up only if still tied).
+  `` `${name} — ${parentName}` ``, walking further up the ancestor chain until
+  the labels differ. This always terminates: sibling uniqueness (§8) means two
+  same-named roles have different parents, and if those parents also share a
+  name they sit under different grandparents, so some ancestor level is
+  distinct.
 
 Consumers:
 
@@ -383,17 +411,20 @@ Consumers:
 
 ## 8. Name uniqueness rules (summary)
 
-| Creating / renaming | Allowed? |
+| Creating / renaming / re-parenting | Allowed? |
 |---|---|
 | a role named `ADMIN` / `USER` (any case) | **No** — reserved (existing `isSystemRoleName`) |
-| a **top-level** role whose name matches another top-level role | **No** — 409 (partial unique index + handler pre-check) |
-| a **child** role whose name matches any other role (child or top-level) | **Yes** |
-| renaming a child role to collide with another child | **Yes** |
-| renaming a top-level role to collide with another top-level role | **No** — 409 |
+| a top-level role whose name matches another top-level role | **No** — 409 |
+| a child whose name matches a **sibling** (same immediate parent) | **No** — 409 |
+| a child whose name matches a non-sibling (different parent, any branch) | **Yes** |
+| renaming a role onto one of its siblings' names | **No** — 409 |
+| dragging a role under a parent that already has a same-named child | **No** — blocked in `canDrop`, 400 backstop |
 
-Top-level-ness is fixed at creation (§2 non-goals: no promote/demote, no
-cross-branch move), so the top-level collision check is only needed in
-`createRole` and the top-level rename path.
+One `{ parentRole, name, tenantId }` unique index enforces the top-level and
+sibling rules together (top-level roles all share `parentRole: null`). Handler
+pre-checks produce the friendly 409/400 message; the index is the backstop.
+Top-level-ness is fixed at creation (§2 non-goals), so the top-level check runs
+only in `createRole` and the top-level rename path.
 
 ---
 
@@ -408,17 +439,23 @@ cross-branch move), so the top-level collision check is only needed in
 - Resolver walks on keys; `canViewRole('ADMIN', anyKey) === true`.
 - `setRoleParent` branch-isolation: same-branch move OK; cross-branch → throws;
   cycle → throws.
-- `createRoleByName`: duplicate **child** name succeeds; duplicate **top-level**
-  name throws; reserved name throws.
-- Rename: one document changes; no user or child writes.
+- `createRoleByName`: duplicate child name under a **different** parent
+  succeeds; duplicate **sibling** name throws; duplicate **top-level** name
+  throws; reserved name throws.
+- `setRoleParent`: moving a role under a parent that already has a same-named
+  child throws.
+- Rename: one document changes; no user or child writes; renaming onto a
+  sibling's name throws.
 
 ### 9.2 `packages/api`
 
 - Admin roles handlers keyed by roleKey: get / update / delete / permissions /
   members.
 - `createRole`: `parentRole: null` → top-level; `parentRole: <key>` → child;
-  top-level name collision → 409; child name collision → 201.
-- `updateRole` re-parent: same-branch → 200; cross-branch → 400; cycle → 400.
+  top-level name collision → 409; sibling name collision → 409; same name under
+  a different parent → 201.
+- `updateRole` re-parent: same-branch → 200; cross-branch → 400; cycle → 400;
+  name clash with an existing child of the new parent → 400.
 - Reassignment `PATCH /:userId/role` by key: in-subtree → 200; cross-branch →
   403; unknown key → 400.
 - `/hierarchy/me` returns `viewableRoleKeys` / `manageableRoleKeys`.
@@ -438,8 +475,9 @@ cross-branch move), so the top-level collision check is only needed in
   button.
 - `EditRoleDialog`: static `Reports to` line; no re-parent request on save.
 - DnD: same-branch drop opens confirm and calls `useSetRoleParent`;
-  cross-branch target shows the notice and is not droppable; keyboard fallback
-  opens the move dialog.
+  cross-branch target shows the branch notice and is not droppable; a target
+  that already has a same-named child shows the clash notice and is not
+  droppable; keyboard fallback opens the move dialog.
 - `buildRoleLabels`: disambiguates only shared names; `orderRolesByTree`
   key-matches.
 
@@ -518,8 +556,8 @@ cross-branch move), so the top-level collision check is only needed in
   `useSetRoleParent` payload.
 - `components/Admin/**/__tests__/*` — per §9.4.
 - `locales/en/translation.json` — `com_admin_role_action_move` / `_add` /
-  `_edit`, `com_admin_role_move_out_of_branch`, `com_admin_role_move_confirm`,
-  `com_admin_role_add_under`.
+  `_edit`, `com_admin_role_move_out_of_branch`, `com_admin_role_move_name_clash`,
+  `com_admin_role_move_confirm`, `com_admin_role_add_under`.
 
 ---
 
@@ -528,9 +566,11 @@ cross-branch move), so the top-level collision check is only needed in
 - **`getRoleByName` audit** — the plan's first task must grep all 81 callers and
   confirm none passes a raw custom-role name. If one does, it needs an explicit
   key lookup or a `getRoleByKey` split.
-- **Partial unique index on `null`** — verify against the deployed MongoDB
-  version that `partialFilterExpression: { parentRole: null }` indexes explicit
-  `null` values (schema default guarantees explicit `null`, not missing).
+- **Compound unique index with `null` segments** — `{ parentRole, name,
+  tenantId }` must treat two top-level roles (both `parentRole: null`, and
+  possibly both `tenantId` missing) as a collision. This is standard MongoDB
+  behaviour (`null` and missing both index as `null`), but confirm it on the
+  deployed version and lock it with a migration test.
 - **Migration ordering under load** — `initializeRoles` runs at boot before the
   server accepts traffic, so the multi-step migration is not racing request
   writes. The CLI dry-run is the review gate before it touches staging.
