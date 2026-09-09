@@ -8,7 +8,6 @@ import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-qu
 import { Toast, ThemeProvider, ToastProvider, useInputModality } from '@librechat/client';
 import { ScreenshotProvider, useApiErrorBoundary } from './hooks';
 import WakeLockManager from '~/components/System/WakeLockManager';
-import QueryDevtoolsGate from '~/components/QueryDevtoolsGate';
 import LanguageSync from '~/components/System/LanguageSync';
 import { getThemeFromEnv } from './utils/getThemeFromEnv';
 import { initializeFontSize } from '~/store/fontSize';
@@ -85,7 +84,7 @@ const App = () => {
                       Worth revisiting once that state has moved to Jotai. */}
                   <RouterProvider router={router} useTransitions={false} />
                   <WakeLockManager />
-                  <QueryDevtoolsGate />
+
                   <Toast />
                   <RadixToast.Viewport className="pointer-events-none fixed inset-x-0 top-0 z-[1000] mx-auto my-2 flex max-w-[560px] flex-col items-stretch justify-start" />
                 </DndProvider>

@@ -17,6 +17,7 @@ import { getResponseErrorMessage } from '~/utils';
 import RoleMembersPanel from './RoleMembersPanel';
 import { SYSTEM_ROLES } from './constants';
 import { useLocalize } from '~/hooks';
+import DeleteConfirmDialog from '~/components/DeleteConfirmDialog/DeleteConfirmDialog';
 
 export default function EditRoleDialog({
   role,
@@ -34,6 +35,7 @@ export default function EditRoleDialog({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const updateMutation = useUpdateRole();
   const deleteMutation = useDeleteRole();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   useEffect(() => {
     setName(role?.name ?? '');
@@ -126,28 +128,9 @@ export default function EditRoleDialog({
                 >
                   {updateMutation.isLoading ? <Spinner /> : localize('com_ui_save')}
                 </Button>
-                {!isSystem && !confirmDelete ? (
-                  <Button variant="outline" type="button" onClick={() => setConfirmDelete(true)}>
+                {!isSystem ? (
+                  <Button variant="outline" type="button" onClick={() => setShowDeleteDialog(true)}>
                     {localize('com_ui_delete')}
-                  </Button>
-                ) : null}
-                {!isSystem && confirmDelete ? (
-                  <Button
-                    variant="destructive"
-                    type="button"
-                    disabled={deleteMutation.isLoading}
-                    onClick={() =>
-                      deleteMutation.mutate(
-                        { roleKey: role.roleKey },
-                        { onSuccess: () => onClose() },
-                      )
-                    }
-                  >
-                    {deleteMutation.isLoading ? (
-                      <Spinner />
-                    ) : (
-                      localize('com_admin_access_delete_confirm', { 0: role.name })
-                    )}
                   </Button>
                 ) : null}
               </div>
@@ -158,6 +141,15 @@ export default function EditRoleDialog({
                 <RoleMembersPanel roleKey={role.roleKey} />
               </TabsContent>
             ) : null}
+
+            <DeleteConfirmDialog
+              roleKey={role.roleKey}
+              roleName={role.name}
+              open={showDeleteDialog}
+              onOpenChange={setShowDeleteDialog}
+              onDeleted={onClose}
+              deleteMsg={localize('com_admin_access_delete_confirm', { 0: role.name })}
+            />
           </Tabs>
         }
       />
