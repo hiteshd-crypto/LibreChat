@@ -167,38 +167,39 @@ export function createRoleMethods(
   }
 
   /**
-   * Retrieve a role by name and convert the found role document to a plain object.
-   * If the role with the given name doesn't exist and the name is a system defined role,
-   * create it and return the lean version.
+   * Retrieve a role by its `roleKey` (the system-role sentinels `ADMIN`/`USER`, or a
+   * custom role's `_id` string) and convert the found document to a plain object.
+   * When the role is missing and `roleRef` is a system-role name, create it and
+   * return the lean version.
    */
   async function getRoleByName(
-    roleName: string,
+    roleRef: string,
     fieldsToSelect: string | string[] | null = null,
   ): Promise<IRole> {
     const cache = deps.getCache?.(CacheKeys.ROLES);
     try {
       if (cache) {
-        const cachedRole = await cache.get(scopedCacheKey(roleName));
+        const cachedRole = await cache.get(scopedCacheKey(roleRef));
         if (cachedRole) {
           return cachedRole as IRole;
         }
       }
       const Role = mongoose.models.Role;
-      let query = Role.findOne({ name: roleName });
+      let query = Role.findOne({ roleKey: roleRef });
       if (fieldsToSelect) {
         query = query.select(fieldsToSelect);
       }
       const role = await query.lean().exec();
 
-      if (!role && systemRoleValues.has(roleName)) {
-        const newRole = await new Role(roleDefaults[roleName as keyof typeof roleDefaults]).save();
+      if (!role && systemRoleValues.has(roleRef)) {
+        const newRole = await new Role(roleDefaults[roleRef as keyof typeof roleDefaults]).save();
         if (cache) {
-          await cache.set(scopedCacheKey(roleName), newRole);
+          await cache.set(scopedCacheKey(roleRef), newRole);
         }
         return newRole.toObject() as IRole;
       }
       if (cache) {
-        await cache.set(scopedCacheKey(roleName), role);
+        await cache.set(scopedCacheKey(roleRef), role);
       }
       return role as unknown as IRole;
     } catch (error) {
@@ -229,10 +230,17 @@ export function createRoleMethods(
       }
 
       const Role = mongoose.models.Role;
+      /**
+       * A config-declared list may still hold role *names* while `user.role` now
+       * holds a `roleKey` — match either so both keep resolving.
+       */
       const nameFilter = {
-        $or: uniqueRoleNames.map((roleName) => ({
-          name: new RegExp(`^${escapeRegExp(roleName)}$`, 'i'),
-        })),
+        $or: [
+          { roleKey: { $in: uniqueRoleNames } },
+          ...uniqueRoleNames.map((roleName) => ({
+            name: new RegExp(`^${escapeRegExp(roleName)}$`, 'i'),
+          })),
+        ],
       };
 
       const runQuery = (filter: Record<string, unknown>) => {
@@ -298,6 +306,7 @@ export function createRoleMethods(
 
   /**
    * Updates access permissions for a specific role and multiple permission types.
+   * `roleName` holds a `roleKey` (system sentinel or a custom role's `_id`).
    */
   async function updateAccessPermissions(
     roleName: string,
@@ -426,7 +435,7 @@ export function createRoleMethods(
 
           try {
             await Role.updateOne(
-              { name: roleName },
+              { roleKey: roleName },
               {
                 $set: updateObj,
                 $unset: unsetFields,
@@ -434,7 +443,10 @@ export function createRoleMethods(
             );
 
             const cache = deps.getCache?.(CacheKeys.ROLES);
-            const updatedRole = await Role.findOne({ name: roleName }).select('-__v').lean().exec();
+            const updatedRole = await Role.findOne({ roleKey: roleName })
+              .select('-__v')
+              .lean()
+              .exec();
             if (cache) {
               await cache.set(scopedCacheKey(roleName), updatedRole);
             }

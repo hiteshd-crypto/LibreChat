@@ -96,6 +96,19 @@ describe('roleKey', () => {
     expect(stored?.roleKey).toBe(String(stored?._id));
     expect(custom.roleKey).toBe(String(custom._id));
   });
+
+  it('getRoleByName resolves a custom role by its roleKey, not its name', async () => {
+    const created = await createRoleByName({ name: 'RESOLVE_BY_KEY' });
+    const byKey = await getRoleByName(created.roleKey);
+    expect(byKey?.name).toBe('RESOLVE_BY_KEY');
+    const byName = await getRoleByName('RESOLVE_BY_KEY');
+    expect(byName).toBeNull();
+  });
+
+  it('getRoleByName still resolves ADMIN/USER by their sentinel key', async () => {
+    await initializeRoles();
+    expect((await getRoleByName(SystemRoles.ADMIN))?.name).toBe(SystemRoles.ADMIN);
+  });
 });
 
 describe('findRolesByNames', () => {
