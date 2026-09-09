@@ -45,6 +45,14 @@ export function createRoleMethods(
   }) => Promise<Pick<IRole, '_id' | 'name' | 'description' | 'parentRole' | 'depth'>[]>;
   countRoles: () => Promise<number>;
   initializeRoles: () => Promise<void>;
+  migrateRoleKeys: (options?: { dryRun?: boolean }) => Promise<{
+    keyed: number;
+    parentLinks: number;
+    users: number;
+    principals: number;
+    dryRun: boolean;
+    planned?: string[];
+  }>;
   getRoleByName: (roleName: string, fieldsToSelect?: string | string[] | null) => Promise<IRole>;
   findRolesByNames: (
     roleNames: string[],
@@ -140,6 +148,119 @@ export function createRoleMethods(
       }
       await role.save();
     }
+
+    await migrateRoleKeys();
+  }
+
+  /**
+   * One-time, idempotent migration from name-based to `roleKey`-based references.
+   * Runs inside `initializeRoles` at boot (before the server accepts traffic) and
+   * via the `migrate:role-keys` CLI. Names are still globally unique when the
+   * name→key map is built, so every rewrite below is unambiguous.
+   */
+  async function migrateRoleKeys(options: { dryRun?: boolean } = {}): Promise<{
+    keyed: number;
+    parentLinks: number;
+    users: number;
+    principals: number;
+    dryRun: boolean;
+    planned?: string[];
+  }> {
+    const dryRun = options.dryRun === true;
+    const Role = mongoose.models.Role as Model<IRole>;
+    const User = mongoose.models.User as Model<IUser>;
+    const planned: string[] = [];
+
+    /* eslint-disable no-restricted-syntax -- boot migration: reads/writes pre-hook, off-schema, and cross-collection refs on the global (non-tenant) Role/User collections. */
+    const rawRoles = await Role.collection
+      .find({}, { projection: { name: 1, parentRole: 1, roleKey: 1 } })
+      .toArray();
+
+    const needsKey = rawRoles.filter((role) => !role.roleKey);
+    const keyByName = new Map<string, string>();
+    for (const role of rawRoles) {
+      const key =
+        (role.roleKey as string | undefined) ??
+        (isSystemRoleName(role.name) ? role.name.toUpperCase() : String(role._id));
+      keyByName.set(role.name, key);
+    }
+    const knownKeys = new Set(keyByName.values());
+
+    for (const role of needsKey) {
+      const key = keyByName.get(role.name) as string;
+      planned.push(`role "${role.name}" → roleKey ${key}`);
+      if (!dryRun) {
+        await Role.collection.updateOne({ _id: role._id }, { $set: { roleKey: key } });
+      }
+    }
+
+    let parentLinks = 0;
+    for (const role of rawRoles) {
+      const parent = role.parentRole as string | null | undefined;
+      if (parent && !knownKeys.has(parent) && keyByName.has(parent)) {
+        const key = keyByName.get(parent) as string;
+        planned.push(`role "${role.name}".parentRole "${parent}" → ${key}`);
+        parentLinks += 1;
+        if (!dryRun) {
+          await Role.collection.updateOne({ _id: role._id }, { $set: { parentRole: key } });
+        }
+      }
+    }
+
+    let users = 0;
+    let principals = 0;
+    const migratedUserIds: string[] = [];
+    for (const role of rawRoles) {
+      if (isSystemRoleName(role.name)) {
+        continue;
+      }
+      const key = keyByName.get(role.name) as string;
+      if (key === role.name) {
+        continue;
+      }
+      const affected = await User.collection
+        .find({ role: role.name }, { projection: { _id: 1 } })
+        .toArray();
+      if (affected.length > 0) {
+        planned.push(`${affected.length} user(s) role "${role.name}" → ${key}`);
+        users += affected.length;
+        migratedUserIds.push(...affected.map((user) => String(user._id)));
+        if (!dryRun) {
+          await User.collection.updateMany({ role: role.name }, { $set: { role: key } });
+        }
+      }
+      for (const collectionName of ['systemgrants', 'configs', 'aclentries']) {
+        const filter = { principalType: 'role', principalId: role.name };
+        const count = await mongoose.connection.collection(collectionName).countDocuments(filter);
+        if (count > 0) {
+          planned.push(`${count} ${collectionName} principal "${role.name}" → ${key}`);
+          principals += count;
+          if (!dryRun) {
+            await mongoose.connection
+              .collection(collectionName)
+              .updateMany(filter, { $set: { principalId: key } });
+          }
+        }
+      }
+    }
+
+    if (!dryRun && (needsKey.length > 0 || parentLinks > 0)) {
+      await Role.collection.dropIndex('name_1_tenantId_1').catch(() => undefined);
+      await Role.syncIndexes();
+      const cache = deps.getCache?.(CacheKeys.ROLES);
+      if (cache) {
+        await Promise.all(
+          [...keyByName.values()].map((key) => cache.set(scopedCacheKey(key), null)),
+        );
+      }
+      await invalidateAuthUserDocCache(migratedUserIds);
+      logger.info(
+        `[migrateRoleKeys] keyed=${needsKey.length} parentLinks=${parentLinks} users=${users} principals=${principals}`,
+      );
+    }
+    /* eslint-enable no-restricted-syntax */
+
+    return { keyed: needsKey.length, parentLinks, users, principals, dryRun, planned };
   }
 
   /**
@@ -902,6 +1023,7 @@ export function createRoleMethods(
     listRoles,
     countRoles,
     initializeRoles,
+    migrateRoleKeys,
     getRoleByName,
     findRolesByNames,
     updateRoleByName,
