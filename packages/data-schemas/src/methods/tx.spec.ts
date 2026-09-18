@@ -6,7 +6,7 @@ import {
   cacheTokenValues,
   premiumTokenValues,
   premiumCacheTokenValues,
-  defaultRate,
+  pricingSettings,
 } from './tx';
 import { matchModelName, findMatchingPattern } from './test-helpers';
 
@@ -275,15 +275,17 @@ describe('getMultiplier', () => {
 
   it('should return defaultRate if tokenType is provided but not found in tokenValues', () => {
     // @ts-expect-error: intentionally passing invalid tokenType to test error handling
-    expect(getMultiplier({ valueKey: '8k', tokenType: 'unknownType' })).toBe(defaultRate);
+    expect(getMultiplier({ valueKey: '8k', tokenType: 'unknownType' })).toBe(
+      pricingSettings.defaultRate,
+    );
   });
 
   it('should return defaultRate if valueKey does not exist in tokenValues', () => {
     expect(getMultiplier({ valueKey: 'non-existent-model', tokenType: 'prompt' })).toBe(
-      defaultRate,
+      pricingSettings.defaultRate,
     );
     expect(getMultiplier({ valueKey: 'non-existent-model', tokenType: 'completion' })).toBe(
-      defaultRate,
+      pricingSettings.defaultRate,
     );
   });
 
@@ -601,7 +603,7 @@ describe('getMultiplier', () => {
 
   it('should return defaultRate if derived valueKey does not match any known patterns', () => {
     expect(getMultiplier({ tokenType: 'prompt', model: 'gpt-10-some-other-info' })).toBe(
-      defaultRate,
+      pricingSettings.defaultRate,
     );
   });
 
@@ -2975,7 +2977,7 @@ describe('Newer model pricing', () => {
     expect(valueKey).toBe(model);
     expect(getMultiplier({ model, tokenType: 'prompt' })).toBe(tokenValues[model].prompt);
     expect(getMultiplier({ model, tokenType: 'completion' })).toBe(tokenValues[model].completion);
-    expect(getMultiplier({ model, tokenType: 'prompt' })).not.toBe(defaultRate);
+    expect(getMultiplier({ model, tokenType: 'prompt' })).not.toBe(pricingSettings.defaultRate);
   });
 
   it('keeps the preceding generation on its own rate', () => {

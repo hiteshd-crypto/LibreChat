@@ -29,6 +29,7 @@ import { createAuditLogModel } from './auditLog';
 import { createSessionModel } from './session';
 import { createBalanceModel } from './balance';
 import { createMessageModel } from './message';
+import { createPricingModel } from './pricing';
 import { createActionModel } from './action';
 import { createBannerModel } from './banner';
 import { createPresetModel } from './preset';
@@ -96,6 +97,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
   ScheduleRun: ReturnType<typeof createScheduleRunModel>;
   RefreshTokenBridge: ReturnType<typeof createRefreshTokenBridgeModel>;
   OpenIDRefreshFlight: ReturnType<typeof createOpenIDRefreshFlightModel>;
+  PricingRate: ReturnType<typeof createPricingModel>;
 } {
   const models = {
     User: createUserModel(mongoose),
@@ -145,6 +147,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
     ScheduleRun: createScheduleRunModel(mongoose),
     RefreshTokenBridge: createRefreshTokenBridgeModel(mongoose),
     OpenIDRefreshFlight: createOpenIDRefreshFlightModel(mongoose),
+    PricingRate: createPricingModel(mongoose),
   };
   /**
    * Background index builds fail silently unless an 'index' listener is

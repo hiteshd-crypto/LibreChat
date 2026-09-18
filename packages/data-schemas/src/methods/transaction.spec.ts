@@ -3,7 +3,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { IBalance } from '..';
 import type { ITransaction } from '~/schema/transaction';
 import type { TxData } from './transaction';
-import { createTxMethods, tokenValues, premiumTokenValues, defaultRate } from './tx';
+import { createTxMethods, tokenValues, premiumTokenValues, pricingSettings } from './tx';
 import { matchModelName, findMatchingPattern } from './test-helpers';
 import { createSpendTokensMethods } from './spendTokens';
 import { createTransactionMethods } from './transaction';
@@ -636,7 +636,7 @@ describe('Partial endpointTokenConfig fallback', () => {
       fallbackPrompt,
     );
     expect(getMultiplier({ model: 'gpt-4', tokenType: 'prompt', endpointTokenConfig })).not.toBe(
-      defaultRate,
+      pricingSettings.defaultRate,
     );
 
     const fallbackCacheRead = getCacheMultiplier({ model: 'claude-3-5-sonnet', cacheType: 'read' });

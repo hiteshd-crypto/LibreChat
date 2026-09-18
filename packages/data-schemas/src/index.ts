@@ -48,6 +48,7 @@ export {
   createMCPAuthorityDatabaseSourceRevision,
   digestMCPAuthorityValue,
 } from './methods';
+export { loadPricingCache } from './methods/pricingCache';
 export { FAVORITE_ITEM_TYPES } from './types/favorite';
 export {
   MAX_AGENT_EVENT_ACTOR_DISCOVERED_TOOLS,

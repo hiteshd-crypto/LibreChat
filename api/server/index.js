@@ -177,6 +177,12 @@ const startServer = async () => {
   await connectDb();
 
   logger.info('Connected to MongoDB');
+
+  const { loadPricingCache } = require('@librechat/data-schemas');
+  const mongoose = require('mongoose');
+  await loadPricingCache(mongoose);
+  logger.info('Pricing cache loaded from MongoDB');
+
   indexSync().catch((err) => {
     logger.error('[indexSync] Background sync failed:', err);
   });
@@ -367,6 +373,7 @@ const startServer = async () => {
   app.use('/api/admin/insights', routes.insights);
   app.use('/api/admin', routes.adminAuth);
   app.use('/api/admin/config', routes.adminConfig);
+  app.use('/api/admin/pricing', routes.adminPricing);
   app.use('/api/admin/code-environments', routes.adminCodeEnvironments);
   app.use('/api/code-environments', routes.codeEnvironments);
   app.use('/api/admin/langfuse', routes.adminLangfuse);
