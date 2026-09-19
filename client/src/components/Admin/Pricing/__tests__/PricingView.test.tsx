@@ -36,6 +36,20 @@ jest.mock('@librechat/client', () => ({
   TableHead: ({ children, ...props }: any) => <th {...props}>{children}</th>,
   TableCell: ({ children }: any) => <td>{children}</td>,
   TableRowHeader: ({ children }: any) => <th scope="row">{children}</th>,
+  ControlCombobox: ({ items, selectedValue, setValue, ariaLabel, disabled }: any) => (
+    <select
+      aria-label={ariaLabel}
+      value={selectedValue}
+      disabled={disabled}
+      onChange={(e) => setValue(e.target.value)}
+    >
+      {items.map((item: any) => (
+        <option key={item.value} value={item.value}>
+          {item.label}
+        </option>
+      ))}
+    </select>
+  ),
   OGDialog: ({ open, children }: any) => (open ? <div role="dialog">{children}</div> : null),
   OGDialogTemplate: ({ title, main, buttons }: any) => (
     <div>
@@ -83,7 +97,10 @@ describe('PricingView', () => {
   it('lists rates read-only with semantic table markup', () => {
     render(<PricingView />);
     expect(screen.getAllByRole('columnheader')).toHaveLength(4);
-    expect(screen.getByRole('rowheader', { name: 'gpt-4o' })).toBeInTheDocument();
+    expect(screen.getAllByRole('rowheader')).toHaveLength(2);
+    expect(screen.getByLabelText('com_admin_pricing_model_select_for:gpt-4o')).toHaveValue(
+      'gpt-4o',
+    );
     const prompt = screen.getByLabelText('com_admin_pricing_prompt_for:gpt-4o');
     expect(prompt).toHaveValue('2.5');
     expect(prompt).toHaveAttribute('readonly');
@@ -93,11 +110,85 @@ describe('PricingView', () => {
     render(<PricingView />);
     const search = screen.getByLabelText('com_admin_pricing_search_placeholder');
     await userEvent.type(search, 'gpt');
-    expect(screen.queryByRole('rowheader', { name: 'claude-3' })).not.toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'gpt-4o' })).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('com_admin_pricing_model_select_for:claude-3'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText('com_admin_pricing_model_select_for:gpt-4o')).toBeInTheDocument();
     await userEvent.clear(search);
     await userEvent.type(search, 'zzz');
     expect(screen.getByRole('status')).toHaveTextContent('com_admin_pricing_no_match');
+  });
+
+  describe('model dropdown', () => {
+    const dropdown = (model: string) =>
+      screen.getByLabelText(`com_admin_pricing_model_select_for:${model}`);
+
+    it('lists the stored model keys as options', () => {
+      render(<PricingView />);
+      const options = Array.from(dropdown('gpt-4o').querySelectorAll('option')).map(
+        (o) => o.textContent,
+      );
+      expect(options).toEqual(['claude-3', 'gpt-4o']);
+    });
+
+    /** Switching a row to another model leaves two rows showing it, so scope to the switched row. */
+    const switchRow = async (from: string, to: string) => {
+      const row = dropdown(from).closest('tr') as HTMLElement;
+      await userEvent.selectOptions(within(row).getByRole('combobox'), to);
+      return within(row);
+    };
+
+    it("populates the row's rates from the selected model's stored entry", async () => {
+      render(<PricingView />);
+      const row = await switchRow('gpt-4o', 'claude-3');
+      expect(row.getByLabelText('com_admin_pricing_prompt_for:claude-3')).toHaveValue('3');
+      expect(row.getByLabelText('com_admin_pricing_completion_for:claude-3')).toHaveValue('15');
+    });
+
+    it('makes Update and Delete act on the selected model', async () => {
+      render(<PricingView />);
+      const row = await switchRow('gpt-4o', 'claude-3');
+
+      await userEvent.click(
+        row.getByRole('button', { name: 'com_admin_pricing_delete_for:claude-3' }),
+      );
+      await userEvent.click(
+        within(screen.getByRole('dialog')).getByRole('button', { name: 'com_ui_delete' }),
+      );
+      expect(mockDelete).toHaveBeenCalledWith({ modelKey: 'claude-3' }, expect.anything());
+    });
+
+    it('saves edits to the selected model', async () => {
+      render(<PricingView />);
+      const row = await switchRow('gpt-4o', 'claude-3');
+      await userEvent.click(
+        row.getByRole('button', { name: 'com_admin_pricing_update_for:claude-3' }),
+      );
+      const prompt = row.getByLabelText('com_admin_pricing_prompt_for:claude-3');
+      await userEvent.clear(prompt);
+      await userEvent.type(prompt, '4');
+      await userEvent.click(row.getByRole('button', { name: 'com_ui_save' }));
+      expect(mockUpdate).toHaveBeenCalledWith(
+        { modelKey: 'claude-3', updates: { prompt: 4, completion: 15 } },
+        expect.anything(),
+      );
+    });
+
+    it('is disabled while the row is being edited', async () => {
+      render(<PricingView />);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'com_admin_pricing_update_for:gpt-4o' }),
+      );
+      expect(dropdown('gpt-4o')).toBeDisabled();
+    });
+
+    it('shows the switched row read-only', async () => {
+      render(<PricingView />);
+      const row = await switchRow('gpt-4o', 'claude-3');
+      expect(row.getByLabelText('com_admin_pricing_prompt_for:claude-3')).toHaveAttribute(
+        'readonly',
+      );
+    });
   });
 
   describe('update', () => {

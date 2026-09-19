@@ -26,6 +26,11 @@ export default function PricingView() {
 
   const rates = useMemo(() => data?.rates ?? [], [data]);
   const existingKeys = useMemo(() => new Set(rates.map((r) => r.modelKey)), [rates]);
+  const ratesByKey = useMemo(() => new Map(rates.map((r) => [r.modelKey, r])), [rates]);
+  const modelItems = useMemo(
+    () => rates.map((r) => ({ label: r.modelKey, value: r.modelKey })),
+    [rates],
+  );
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return q ? rates.filter((r) => r.modelKey.toLowerCase().includes(q)) : rates;
@@ -91,13 +96,20 @@ export default function PricingView() {
           </TableHeader>
           <TableBody>
             {adding ? (
-              <PricingRow existingKeys={existingKeys} onDiscard={() => setAdding(false)} />
+              <PricingRow
+                existingKeys={existingKeys}
+                ratesByKey={ratesByKey}
+                modelItems={modelItems}
+                onDiscard={() => setAdding(false)}
+              />
             ) : null}
             {visible.map((rate) => (
               <PricingRow
                 key={rate.modelKey}
                 rate={rate}
                 existingKeys={existingKeys}
+                ratesByKey={ratesByKey}
+                modelItems={modelItems}
                 onRequestDelete={setDeleteTarget}
               />
             ))}

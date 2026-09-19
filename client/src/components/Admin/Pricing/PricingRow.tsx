@@ -7,6 +7,7 @@ import {
   TableCell,
   TableRow,
   TableRowHeader,
+  ControlCombobox,
   useToastContext,
 } from '@librechat/client';
 import type { TAdminPricingRate, TAdminPricingMutationResponse } from 'librechat-data-provider';
@@ -22,10 +23,16 @@ interface RowErrors {
   completion?: string;
 }
 
+type ModelItem = { label: string; value: string };
+
 interface PricingRowProps {
   /** The stored rate; omitted for the Add New draft row, which starts in edit mode. */
   rate?: TAdminPricingRate;
   existingKeys: ReadonlySet<string>;
+  /** Stored rates by `modelKey`: selecting a model in the row dropdown reads its rates from here. */
+  ratesByKey: ReadonlyMap<string, TAdminPricingRate>;
+  /** Dropdown options: every stored `modelKey`. */
+  modelItems: ModelItem[];
   /** Draft rows only: called on cancel and after a successful create. */
   onDiscard?: () => void;
   onRequestDelete?: (rate: TAdminPricingRate) => void;
@@ -45,6 +52,8 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 export default function PricingRow({
   rate,
   existingKeys,
+  ratesByKey,
+  modelItems,
   onDiscard,
   onRequestDelete,
 }: PricingRowProps) {
@@ -54,6 +63,9 @@ export default function PricingRow({
   const updateMutation = useUpdatePricingRate();
 
   const isNew = rate == null;
+  const [selectedKey, setSelectedKey] = useState(rate?.modelKey ?? '');
+  /** The stored entry this row currently shows: the dropdown selection, else the row's own model. */
+  const current = rate ? (ratesByKey.get(selectedKey) ?? rate) : undefined;
   const [editing, setEditing] = useState(isNew);
   const [modelKey, setModelKey] = useState('');
   const [prompt, setPrompt] = useState(rate ? String(rate.prompt) : '');
@@ -61,7 +73,7 @@ export default function PricingRow({
   const [errors, setErrors] = useState<RowErrors>({});
   const modelRef = useRef<HTMLInputElement>(null);
   const saving = createMutation.isLoading || updateMutation.isLoading;
-  const rowKey = rate?.modelKey ?? (modelKey.trim() || localize('com_admin_pricing_new_model'));
+  const rowKey = current?.modelKey ?? (modelKey.trim() || localize('com_admin_pricing_new_model'));
 
   useEffect(() => {
     if (isNew) {
@@ -69,12 +81,18 @@ export default function PricingRow({
     }
   }, [isNew]);
 
+  const selectModel = (key: string) => {
+    setSelectedKey(key);
+    setErrors({});
+    setEditing(false);
+  };
+
   const startEditing = () => {
-    if (!rate) {
+    if (!current) {
       return;
     }
-    setPrompt(String(rate.prompt));
-    setCompletion(String(rate.completion));
+    setPrompt(String(current.prompt));
+    setCompletion(String(current.completion));
     setErrors({});
     setEditing(true);
   };
@@ -128,7 +146,7 @@ export default function PricingRow({
       return;
     }
 
-    if (!rate) {
+    if (!current) {
       const key = modelKey.trim();
       createMutation.mutate(
         { modelKey: key, prompt: promptValue, completion: completionValue },
@@ -147,10 +165,10 @@ export default function PricingRow({
     }
 
     updateMutation.mutate(
-      { modelKey: rate.modelKey, updates: { prompt: promptValue, completion: completionValue } },
+      { modelKey: current.modelKey, updates: { prompt: promptValue, completion: completionValue } },
       {
         onSuccess: (result) => {
-          notifySaved(result, rate.modelKey, false);
+          notifySaved(result, current.modelKey, false);
           setEditing(false);
         },
         onError: notifyFailed,
@@ -164,8 +182,22 @@ export default function PricingRow({
 
   return (
     <TableRow className="border-b border-border-light">
-      {rate ? (
-        <TableRowHeader className="p-3 text-text-primary">{rate.modelKey}</TableRowHeader>
+      {current ? (
+        <TableRowHeader className="p-3 align-top text-text-primary">
+          <ControlCombobox
+            selectedValue={current.modelKey}
+            displayValue={current.modelKey}
+            items={modelItems}
+            setValue={selectModel}
+            ariaLabel={localize('com_admin_pricing_model_select_for', { 0: current.modelKey })}
+            searchPlaceholder={localize('com_admin_pricing_model_search')}
+            selectPlaceholder={localize('com_admin_pricing_model_label')}
+            isCollapsed={false}
+            showCarat={true}
+            variant="field"
+            disabled={saving || editing}
+          />
+        </TableRowHeader>
       ) : (
         <TableCell className="p-3 align-top">
           <Input
@@ -184,7 +216,7 @@ export default function PricingRow({
       <TableCell className="p-3 align-top">
         <Input
           inputMode="decimal"
-          value={editing ? prompt : String(rate?.prompt ?? '')}
+          value={editing ? prompt : String(current?.prompt ?? '')}
           onChange={(e) => setPrompt(e.target.value)}
           readOnly={!editing}
           disabled={saving}
@@ -197,7 +229,7 @@ export default function PricingRow({
       <TableCell className="p-3 align-top">
         <Input
           inputMode="decimal"
-          value={editing ? completion : String(rate?.completion ?? '')}
+          value={editing ? completion : String(current?.completion ?? '')}
           onChange={(e) => setCompletion(e.target.value)}
           readOnly={!editing}
           disabled={saving}
@@ -228,13 +260,13 @@ export default function PricingRow({
               {localize('com_ui_update')}
             </Button>
           )}
-          {rate ? (
+          {current ? (
             <Button
               variant="outline"
               type="button"
               disabled={saving}
               aria-label={localize('com_admin_pricing_delete_for', { 0: rowKey })}
-              onClick={() => onRequestDelete?.(rate)}
+              onClick={() => onRequestDelete?.(current)}
             >
               {localize('com_ui_delete')}
             </Button>

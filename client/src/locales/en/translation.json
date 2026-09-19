@@ -68,6 +68,8 @@
   "com_admin_pricing_model_label": "Model name",
   "com_admin_pricing_model_placeholder": "e.g. gpt-4o",
   "com_admin_pricing_model_required": "Enter a model name.",
+  "com_admin_pricing_model_search": "Search models…",
+  "com_admin_pricing_model_select_for": "Select model, currently {{0}}",
   "com_admin_pricing_new_model": "new model",
   "com_admin_pricing_no_match": "No models match your search.",
   "com_admin_pricing_prompt_for": "Prompt rate for {{0}}",
