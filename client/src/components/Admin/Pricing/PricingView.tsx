@@ -121,7 +121,11 @@ export default function PricingView() {
         </p>
       )}
 
-      <DeleteRateDialog rate={deleteTarget} onClose={() => setDeleteTarget(null)} />
+      <DeleteRateDialog
+        key={deleteTarget?.modelKey ?? 'closed'}
+        rate={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

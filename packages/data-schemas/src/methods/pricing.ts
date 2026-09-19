@@ -52,22 +52,24 @@ export function createPricingMethods(mongoose: typeof import('mongoose')): Prici
 
   async function createStandardPricingRate(rate: StandardRate): Promise<StandardRate> {
     try {
-      await getModel().create({
+      const created = await getModel().create({
         modelKey: rate.modelKey,
         category: STANDARD,
         prompt: rate.prompt,
         completion: rate.completion,
       });
+      return {
+        modelKey: created.modelKey,
+        prompt: created.prompt ?? rate.prompt,
+        completion: created.completion ?? rate.completion,
+        updatedAt: created.updatedAt,
+      };
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         throw new PricingConflictError(`A pricing entry for "${rate.modelKey}" already exists`);
       }
       throw error;
     }
-    const created = await getModel()
-      .findOne({ modelKey: rate.modelKey, category: STANDARD }, PROJECTION)
-      .lean<StandardRate>();
-    return created ?? rate;
   }
 
   async function updateStandardPricingRate(

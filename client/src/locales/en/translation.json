@@ -29,7 +29,6 @@
   "com_admin_access_tab_details": "Details",
   "com_admin_access_tab_members": "Members",
   "com_admin_access_user_role_note": "Every user has this role by default — its membership isn't editable. Manage admins from the ADMIN role.",
-  "com_admin_access_title": "Access",
   "com_admin_balance_hint": "Token credits per user. 1,000 credits = $0.001 USD.",
   "com_admin_balance_invalid": "Enter a number of 0 or more.",
   "com_admin_balance_label": "Token balance",

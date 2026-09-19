@@ -101,19 +101,21 @@ export const useAdminAllUsers = (
   useQuery<TAdminAllUsers>(
     [QueryKeys.adminAllUsers],
     async () => {
-      const users: TAdminUserListItem[] = [];
+      const byId = new Map<string, TAdminUserListItem>();
+      let fetched = 0;
       let total = 0;
       let lastPageSize = 0;
       do {
         const page = await dataService.listAdminUsers({
           limit: ALL_USERS_PAGE_SIZE,
-          offset: users.length,
+          offset: fetched,
         });
-        users.push(...page.users);
+        page.users.forEach((user) => byId.set(user.id, user));
+        fetched += page.users.length;
         total = page.total;
         lastPageSize = page.users.length;
-      } while (lastPageSize > 0 && users.length < total && users.length < ALL_USERS_CAP);
-      return { users, total, truncated: users.length < total };
+      } while (lastPageSize > 0 && fetched < total && fetched < ALL_USERS_CAP);
+      return { users: Array.from(byId.values()), total, truncated: fetched < total };
     },
     { refetchOnWindowFocus: false, staleTime: 60_000, ...config },
   );

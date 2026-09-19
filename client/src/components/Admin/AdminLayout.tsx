@@ -15,6 +15,7 @@ export default function AdminLayout() {
   const item = (to: string, label: string) => (
     <NavLink
       to={to}
+      end
       className={({ isActive }) =>
         cn(
           'whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors',
