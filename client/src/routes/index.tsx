@@ -60,6 +60,10 @@ const loadAdminLayout = () =>
   import('~/components/Admin').then((m) => ({ Component: m.AdminLayout }));
 const loadAdminAccess = () =>
   import('~/components/Admin').then((m) => ({ Component: m.AccessView }));
+const loadAdminPricing = () =>
+  import('~/components/Admin').then((m) => ({ Component: m.PricingView }));
+const loadAdminBalance = () =>
+  import('~/components/Admin').then((m) => ({ Component: m.BalanceView }));
 const loadAdminUsers = () => import('~/components/Admin').then((m) => ({ Component: m.UsersView }));
 const loadAdminUserConversations = () =>
   import('~/components/Admin').then((m) => ({ Component: m.UserConversationsView }));
@@ -215,6 +219,8 @@ export const router = createBrowserRouter(
                   element: <Navigate to="/admin/access" replace={true} />,
                 },
                 { path: 'access', lazy: loadAdminAccess },
+                { path: 'pricing', lazy: loadAdminPricing },
+                { path: 'balance', lazy: loadAdminBalance },
                 { path: 'users', lazy: loadAdminUsers },
                 { path: 'users/:userId', lazy: loadAdminUserConversations },
                 { path: 'users/:userId/c/:conversationId', lazy: loadAdminTranscript },
