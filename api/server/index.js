@@ -374,6 +374,7 @@ const startServer = async () => {
   app.use('/api/admin', routes.adminAuth);
   app.use('/api/admin/config', routes.adminConfig);
   app.use('/api/admin/pricing', routes.adminPricing);
+  app.use('/api/admin/balance', routes.adminBalance);
   app.use('/api/admin/code-environments', routes.adminCodeEnvironments);
   app.use('/api/code-environments', routes.codeEnvironments);
   app.use('/api/admin/langfuse', routes.adminLangfuse);

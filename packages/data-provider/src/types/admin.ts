@@ -113,3 +113,15 @@ export interface TAdminPricingDeleteResponse {
   success: boolean;
   cacheReloaded: boolean;
 }
+
+/** A user's token balance. `tokenCredits` is 0 and `hasRecord` false when no balance document exists. */
+export interface TAdminUserBalance {
+  userId: string;
+  /** 1000 tokenCredits = $0.001 USD. */
+  tokenCredits: number;
+  hasRecord: boolean;
+}
+
+export interface TAdminUserBalanceUpdateBody {
+  tokenCredits: number;
+}
