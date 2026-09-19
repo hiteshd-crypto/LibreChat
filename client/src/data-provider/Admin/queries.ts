@@ -5,6 +5,8 @@ import type {
   TMessage,
   TMyHierarchy,
   TAdminRoleListResponse,
+  TAdminUserBalance,
+  TAdminUserListItem,
   TAdminPricingListResponse,
   TAdminMemberListResponse,
   TAdminUserListResponse,
@@ -21,6 +23,15 @@ export const MEMBERS_PAGE_SIZE = 20;
 const USERS_PAGE_SIZE = 25;
 const USER_SEARCH_LIMIT = 20;
 const CONVERSATIONS_PAGE_SIZE = 25;
+const ALL_USERS_PAGE_SIZE = 200;
+const ALL_USERS_CAP = 5000;
+
+export interface TAdminAllUsers {
+  users: TAdminUserListItem[];
+  total: number;
+  /** `true` when the safety cap stopped paging before every user was loaded. */
+  truncated: boolean;
+}
 
 export const useAdminRoles = (
   config?: UseQueryOptions<TAdminRoleListResponse>,
@@ -81,6 +92,40 @@ export const useAdminUsers = (
         offset: (page - 1) * USERS_PAGE_SIZE,
       }),
     { keepPreviousData: true, refetchOnWindowFocus: false, staleTime: 30_000, ...config },
+  );
+
+/** Pages through the admin user list so a picker can filter every user client-side. */
+export const useAdminAllUsers = (
+  config?: UseQueryOptions<TAdminAllUsers>,
+): QueryObserverResult<TAdminAllUsers> =>
+  useQuery<TAdminAllUsers>(
+    [QueryKeys.adminAllUsers],
+    async () => {
+      const users: TAdminUserListItem[] = [];
+      let total = 0;
+      let lastPageSize = 0;
+      do {
+        const page = await dataService.listAdminUsers({
+          limit: ALL_USERS_PAGE_SIZE,
+          offset: users.length,
+        });
+        users.push(...page.users);
+        total = page.total;
+        lastPageSize = page.users.length;
+      } while (lastPageSize > 0 && users.length < total && users.length < ALL_USERS_CAP);
+      return { users, total, truncated: users.length < total };
+    },
+    { refetchOnWindowFocus: false, staleTime: 60_000, ...config },
+  );
+
+export const useAdminUserBalance = (
+  userId: string,
+  config?: UseQueryOptions<TAdminUserBalance>,
+): QueryObserverResult<TAdminUserBalance> =>
+  useQuery<TAdminUserBalance>(
+    [QueryKeys.adminUserBalance, userId],
+    () => dataService.getAdminUserBalance(userId),
+    { enabled: !!userId, refetchOnWindowFocus: false, ...config },
   );
 
 export const useAdminUserSearch = (

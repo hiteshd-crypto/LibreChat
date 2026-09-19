@@ -2,6 +2,7 @@ import { QueryKeys, dataService } from 'librechat-data-provider';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   TAdminRole,
+  TAdminUserBalance,
   TAdminPricingCreateBody,
   TAdminPricingUpdateBody,
   TAdminPricingDeleteResponse,
@@ -138,4 +139,19 @@ export const useDeletePricingRate = (): UseMutationResult<
   return useMutation(({ modelKey }) => dataService.deleteAdminPricingRate(modelKey), {
     onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminPricing]),
   });
+};
+
+export const useSetUserBalance = (): UseMutationResult<
+  TAdminUserBalance,
+  Error,
+  { userId: string; tokenCredits: number }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(
+    ({ userId, tokenCredits }) => dataService.setAdminUserBalance(userId, tokenCredits),
+    {
+      onSuccess: (balance) =>
+        queryClient.setQueryData([QueryKeys.adminUserBalance, balance.userId], balance),
+    },
+  );
 };

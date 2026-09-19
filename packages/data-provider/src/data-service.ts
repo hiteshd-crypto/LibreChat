@@ -1398,6 +1398,18 @@ export function deleteAdminPricingRate(modelKey: string): Promise<adm.TAdminPric
   return request.delete(endpoints.adminPricingRate(modelKey));
 }
 
+/* Admin — per-user token balance (backed by /api/admin/balance*) */
+export function getAdminUserBalance(userId: string): Promise<adm.TAdminUserBalance> {
+  return request.get(endpoints.adminUserBalance(userId));
+}
+
+export function setAdminUserBalance(
+  userId: string,
+  tokenCredits: number,
+): Promise<adm.TAdminUserBalance> {
+  return request.patch(endpoints.adminUserBalance(userId), { tokenCredits });
+}
+
 export function listAdminRoleMembers(
   roleKey: string,
   params?: { limit?: number; offset?: number },
