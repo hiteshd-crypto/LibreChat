@@ -1,4 +1,5 @@
 import type { RoleMethods, RoleDeps } from './role';
+import type { PricingMethods } from './pricing';
 import {
   createOpenIDRefreshFlightMethods,
   type OpenIDRefreshFlightMethods,
@@ -10,6 +11,7 @@ import {
 import { createSessionMethods, DEFAULT_REFRESH_TOKEN_EXPIRY, type SessionMethods } from './session';
 import { createUserMethods, DEFAULT_SESSION_EXPIRY, type UserMethods } from './user';
 import { createFileMethods, type FileMethods, type FileOwnerScope } from './file';
+import { createPricingMethods, PricingConflictError } from './pricing';
 import { createTokenMethods, type TokenMethods } from './token';
 import { createRoleMethods, RoleConflictError } from './role';
 import { createKeyMethods, type KeyMethods } from './key';
@@ -170,6 +172,7 @@ import { createInsightsMethods, type InsightsMethods } from './insights';
 export {
   runAfterTransaction,
   RoleConflictError,
+  PricingConflictError,
   MCPAuthorityProofError,
   MAX_MCP_AUTHORITY_TARGETS,
   DEFAULT_REFRESH_TOKEN_EXPIRY,
@@ -224,6 +227,7 @@ export type AllMethods = UserMethods &
   AuditLogMethods &
   ShareMethods &
   AccessRoleMethods &
+  PricingMethods &
   PluginAuthMethods &
   ActionMethods &
   AssistantMethods &
@@ -439,6 +443,7 @@ export function createMethods(
     ...createMCPServerMethods(mongoose),
     ...createCodeEnvironmentMethods(mongoose),
     ...createAccessRoleMethods(mongoose),
+    ...createPricingMethods(mongoose),
     ...userGroupMethods,
     ...aclEntryMethods,
     ...systemGrantMethods,

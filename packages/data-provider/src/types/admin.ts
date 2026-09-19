@@ -80,3 +80,36 @@ export interface TAdminUserConversationsResponse {
 }
 
 export type TAdminUserMessagesResponse = TMessage[];
+
+/** A standard-category pricing rate: USD per 1M tokens, keyed by model. */
+export interface TAdminPricingRate {
+  modelKey: string;
+  prompt: number;
+  completion: number;
+  updatedAt?: string;
+}
+
+export interface TAdminPricingListResponse {
+  rates: TAdminPricingRate[];
+}
+
+export interface TAdminPricingCreateBody {
+  modelKey: string;
+  prompt: number;
+  completion: number;
+}
+
+export type TAdminPricingUpdateBody = Partial<
+  Pick<TAdminPricingCreateBody, 'prompt' | 'completion'>
+>;
+
+export interface TAdminPricingMutationResponse {
+  rate: TAdminPricingRate;
+  /** `false` when the row was saved but the in-memory pricing cache failed to reload. */
+  cacheReloaded: boolean;
+}
+
+export interface TAdminPricingDeleteResponse {
+  success: boolean;
+  cacheReloaded: boolean;
+}
