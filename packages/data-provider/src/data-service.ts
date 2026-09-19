@@ -1376,6 +1376,28 @@ export function deleteAdminRole(roleKey: string): Promise<{ success: true }> {
   return request.delete(endpoints.adminRole(roleKey));
 }
 
+/* Admin — model pricing rates (backed by /api/admin/pricing*) */
+export function listAdminPricing(): Promise<adm.TAdminPricingListResponse> {
+  return request.get(endpoints.adminPricing());
+}
+
+export function createAdminPricingRate(
+  body: adm.TAdminPricingCreateBody,
+): Promise<adm.TAdminPricingMutationResponse> {
+  return request.post(endpoints.adminPricing(), body);
+}
+
+export function updateAdminPricingRate(
+  modelKey: string,
+  body: adm.TAdminPricingUpdateBody,
+): Promise<adm.TAdminPricingMutationResponse> {
+  return request.patch(endpoints.adminPricingRate(modelKey), body);
+}
+
+export function deleteAdminPricingRate(modelKey: string): Promise<adm.TAdminPricingDeleteResponse> {
+  return request.delete(endpoints.adminPricingRate(modelKey));
+}
+
 export function listAdminRoleMembers(
   roleKey: string,
   params?: { limit?: number; offset?: number },

@@ -5,6 +5,7 @@ import type {
   TMessage,
   TMyHierarchy,
   TAdminRoleListResponse,
+  TAdminPricingListResponse,
   TAdminMemberListResponse,
   TAdminUserListResponse,
   TAdminUserSearchResponse,
@@ -29,6 +30,19 @@ export const useAdminRoles = (
     staleTime: 30_000,
     ...config,
   });
+
+export const useAdminPricing = (
+  config?: UseQueryOptions<TAdminPricingListResponse>,
+): QueryObserverResult<TAdminPricingListResponse> =>
+  useQuery<TAdminPricingListResponse>(
+    [QueryKeys.adminPricing],
+    () => dataService.listAdminPricing(),
+    {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      ...config,
+    },
+  );
 
 /** The caller's own hierarchy access — drives the admin guard, sidebar link, and role pickers. */
 export const useMyHierarchy = (

@@ -60,6 +60,7 @@ export enum QueryKeys {
   rolesList = 'rolesList',
   adminRoles = 'adminRoles',
   adminRoleMembers = 'adminRoleMembers',
+  adminPricing = 'adminPricing',
   adminUsers = 'adminUsers',
   adminUserSearch = 'adminUserSearch',
   adminUserConversations = 'adminUserConversations',

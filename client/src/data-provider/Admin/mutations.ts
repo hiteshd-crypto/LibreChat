@@ -1,7 +1,13 @@
 import { QueryKeys, dataService } from 'librechat-data-provider';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type {
+  TAdminRole,
+  TAdminPricingCreateBody,
+  TAdminPricingUpdateBody,
+  TAdminPricingDeleteResponse,
+  TAdminPricingMutationResponse,
+} from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
-import type { TAdminRole } from 'librechat-data-provider';
 
 export const useCreateRole = (): UseMutationResult<
   { role: TAdminRole },
@@ -97,5 +103,39 @@ export const useRemoveRoleMember = (): UseMutationResult<
       queryClient.invalidateQueries([QueryKeys.adminUsers]);
       queryClient.invalidateQueries([QueryKeys.user]);
     },
+  });
+};
+
+export const useCreatePricingRate = (): UseMutationResult<
+  TAdminPricingMutationResponse,
+  Error,
+  TAdminPricingCreateBody
+> => {
+  const queryClient = useQueryClient();
+  return useMutation((body) => dataService.createAdminPricingRate(body), {
+    onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminPricing]),
+  });
+};
+
+export const useUpdatePricingRate = (): UseMutationResult<
+  TAdminPricingMutationResponse,
+  Error,
+  { modelKey: string; updates: TAdminPricingUpdateBody }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(
+    ({ modelKey, updates }) => dataService.updateAdminPricingRate(modelKey, updates),
+    { onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminPricing]) },
+  );
+};
+
+export const useDeletePricingRate = (): UseMutationResult<
+  TAdminPricingDeleteResponse,
+  Error,
+  { modelKey: string }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(({ modelKey }) => dataService.deleteAdminPricingRate(modelKey), {
+    onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminPricing]),
   });
 };
