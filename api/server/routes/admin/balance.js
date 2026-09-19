@@ -13,6 +13,7 @@ const handlers = createAdminBalanceHandlers({
   getUserById: db.getUserById,
   findBalanceByUser: db.findBalanceByUser,
   upsertBalanceFields: db.upsertBalanceFields,
+  setBalanceIfUnchanged: db.setBalanceIfUnchanged,
 });
 
 router.use(requireJwtAuth, requireAdminAccess);

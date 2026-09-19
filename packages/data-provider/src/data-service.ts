@@ -1405,9 +1405,9 @@ export function getAdminUserBalance(userId: string): Promise<adm.TAdminUserBalan
 
 export function setAdminUserBalance(
   userId: string,
-  tokenCredits: number,
+  body: adm.TAdminUserBalanceUpdateBody,
 ): Promise<adm.TAdminUserBalance> {
-  return request.patch(endpoints.adminUserBalance(userId), { tokenCredits });
+  return request.patch(endpoints.adminUserBalance(userId), body);
 }
 
 export function listAdminRoleMembers(

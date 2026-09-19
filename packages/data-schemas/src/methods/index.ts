@@ -1,5 +1,6 @@
 import type { RoleMethods, RoleDeps } from './role';
 import type { PricingMethods } from './pricing';
+import type { BalanceMethods } from './balance';
 import {
   createOpenIDRefreshFlightMethods,
   type OpenIDRefreshFlightMethods,
@@ -15,6 +16,7 @@ import { createPricingMethods, PricingConflictError } from './pricing';
 import { createTokenMethods, type TokenMethods } from './token';
 import { createRoleMethods, RoleConflictError } from './role';
 import { createKeyMethods, type KeyMethods } from './key';
+import { createBalanceMethods } from './balance';
 /* Memories */
 import { createMemoryMethods, type MemoryMethods } from './memory';
 /* Tool Favorites */
@@ -228,6 +230,7 @@ export type AllMethods = UserMethods &
   ShareMethods &
   AccessRoleMethods &
   PricingMethods &
+  BalanceMethods &
   PluginAuthMethods &
   ActionMethods &
   AssistantMethods &
@@ -444,6 +447,7 @@ export function createMethods(
     ...createCodeEnvironmentMethods(mongoose),
     ...createAccessRoleMethods(mongoose),
     ...createPricingMethods(mongoose),
+    ...createBalanceMethods(mongoose),
     ...userGroupMethods,
     ...aclEntryMethods,
     ...systemGrantMethods,

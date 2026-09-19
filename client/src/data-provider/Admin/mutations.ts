@@ -1,8 +1,11 @@
+import axios from 'axios';
 import { QueryKeys, dataService } from 'librechat-data-provider';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   TAdminRole,
   TAdminUserBalance,
+  TAdminUserBalanceConflict,
+  TAdminUserBalanceUpdateBody,
   TAdminPricingCreateBody,
   TAdminPricingUpdateBody,
   TAdminPricingDeleteResponse,
@@ -141,17 +144,29 @@ export const useDeletePricingRate = (): UseMutationResult<
   });
 };
 
+/** The current balance from a 409 "changed since loaded" response, or `null` for any other error. */
+export const getBalanceConflict = (error: unknown): TAdminUserBalance | null => {
+  if (!axios.isAxiosError(error) || error.response?.status !== 409) {
+    return null;
+  }
+  return (error.response.data as Partial<TAdminUserBalanceConflict>).balance ?? null;
+};
+
 export const useSetUserBalance = (): UseMutationResult<
   TAdminUserBalance,
   Error,
-  { userId: string; tokenCredits: number }
+  { userId: string } & TAdminUserBalanceUpdateBody
 > => {
   const queryClient = useQueryClient();
-  return useMutation(
-    ({ userId, tokenCredits }) => dataService.setAdminUserBalance(userId, tokenCredits),
-    {
-      onSuccess: (balance) =>
-        queryClient.setQueryData([QueryKeys.adminUserBalance, balance.userId], balance),
+  const cacheBalance = (balance: TAdminUserBalance) =>
+    queryClient.setQueryData([QueryKeys.adminUserBalance, balance.userId], balance);
+  return useMutation(({ userId, ...body }) => dataService.setAdminUserBalance(userId, body), {
+    onSuccess: cacheBalance,
+    onError: (error) => {
+      const current = getBalanceConflict(error);
+      if (current) {
+        cacheBalance(current);
+      }
     },
-  );
+  });
 };

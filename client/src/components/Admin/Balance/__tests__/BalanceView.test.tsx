@@ -1,5 +1,5 @@
 import userEvent from '@testing-library/user-event';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import BalanceView from '../BalanceView';
 
 const mockUseAdminAllUsers = jest.fn();
@@ -11,6 +11,7 @@ jest.mock('~/data-provider', () => ({
   useAdminAllUsers: () => mockUseAdminAllUsers(),
   useAdminUserBalance: (userId: string) => mockUseAdminUserBalance(userId),
   useSetUserBalance: () => ({ mutate: mockSetBalance, isLoading: false }),
+  getBalanceConflict: (error: { conflict?: unknown }) => error?.conflict ?? null,
 }));
 
 jest.mock('~/hooks', () => ({
@@ -154,9 +155,55 @@ describe('BalanceView', () => {
       await userEvent.type(field, '7500.5');
       await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
       expect(mockSetBalance).toHaveBeenCalledWith(
-        { userId: 'u1', tokenCredits: 7500.5 },
+        { userId: 'u1', tokenCredits: 7500.5, expectedTokenCredits: 5000 },
         expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
       );
+    });
+
+    it('sends null as the expected value when the user has no balance record yet', async () => {
+      balanceLoaded(0, false);
+      render(<BalanceView />);
+      await pickUser('u1');
+      await userEvent.click(screen.getByRole('button', { name: 'com_ui_update' }));
+      const field = screen.getByLabelText('com_admin_balance_label');
+      await userEvent.clear(field);
+      await userEvent.type(field, '100');
+      await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+      expect(mockSetBalance).toHaveBeenCalledWith(
+        { userId: 'u1', tokenCredits: 100, expectedTokenCredits: null },
+        expect.anything(),
+      );
+    });
+
+    it('keeps the draft and explains a conflict when the balance changed meanwhile', async () => {
+      render(<BalanceView />);
+      await pickUser('u1');
+      await userEvent.click(screen.getByRole('button', { name: 'com_ui_update' }));
+      const field = screen.getByLabelText('com_admin_balance_label');
+      await userEvent.clear(field);
+      await userEvent.type(field, '7500');
+      await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+
+      const { onError } = mockSetBalance.mock.calls[0][1];
+      act(() => onError({ conflict: { userId: 'u1', tokenCredits: 3000, hasRecord: true } }));
+
+      expect(screen.getByRole('alert')).toHaveTextContent('com_admin_balance_conflict:3000');
+      expect(screen.getByLabelText('com_admin_balance_label')).toHaveValue('7500');
+      expect(screen.getByRole('button', { name: 'com_ui_save' })).toBeInTheDocument();
+      expect(mockShowToast).not.toHaveBeenCalled();
+    });
+
+    it('toasts, rather than showing a conflict, for any other save failure', async () => {
+      render(<BalanceView />);
+      await pickUser('u1');
+      await userEvent.click(screen.getByRole('button', { name: 'com_ui_update' }));
+      await userEvent.click(screen.getByRole('button', { name: 'com_ui_save' }));
+
+      const { onError } = mockSetBalance.mock.calls[0][1];
+      act(() => onError(new Error('boom')));
+
+      expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
     it.each(['-5', 'abc', '', '1e3'])('rejects %p inline without saving', async (input) => {

@@ -124,4 +124,15 @@ export interface TAdminUserBalance {
 
 export interface TAdminUserBalanceUpdateBody {
   tokenCredits: number;
+  /**
+   * The balance the caller last saw: a number, or `null` when it saw no balance record.
+   * When present, the save is rejected with 409 if the stored value has since changed.
+   */
+  expectedTokenCredits?: number | null;
+}
+
+/** The 409 body returned when a guarded balance save finds the value changed. */
+export interface TAdminUserBalanceConflict {
+  error: string;
+  balance: TAdminUserBalance;
 }

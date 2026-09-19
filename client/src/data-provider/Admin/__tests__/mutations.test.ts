@@ -1,6 +1,7 @@
 import { createElement } from 'react';
-import { QueryKeys } from 'librechat-data-provider';
+import { AxiosError } from 'axios';
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryKeys, dataService } from 'librechat-data-provider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import {
@@ -9,6 +10,8 @@ import {
   useCreateRole,
   useSetRoleParent,
   useSetUserRole,
+  useSetUserBalance,
+  getBalanceConflict,
 } from '../mutations';
 
 jest.mock('librechat-data-provider', () => {
@@ -22,6 +25,7 @@ jest.mock('librechat-data-provider', () => {
       createAdminRole: jest.fn().mockResolvedValue({ role: { name: 'SALES_MANAGER' } }),
       setAdminRoleParent: jest.fn().mockResolvedValue({ role: { name: 'SALES_MANAGER' } }),
       setAdminUserRole: jest.fn().mockResolvedValue({ success: true }),
+      setAdminUserBalance: jest.fn(),
     },
   };
 });
@@ -99,5 +103,78 @@ describe('hierarchy tree mutations', () => {
     expect(dataService.setAdminUserRole).toHaveBeenCalledWith('u1', 'SALES_EMPLOYEE');
     expect(invalidate).toHaveBeenCalledWith([QueryKeys.adminUsers]);
     expect(invalidate).toHaveBeenCalledWith([QueryKeys.user]);
+  });
+});
+
+describe('user balance mutation', () => {
+  const quietClient = () =>
+    new QueryClient({
+      logger: { log: () => undefined, warn: () => undefined, error: () => undefined },
+      defaultOptions: { queries: { retry: false } },
+    });
+  const setAdminUserBalance = dataService.setAdminUserBalance as jest.MockedFunction<
+    typeof dataService.setAdminUserBalance
+  >;
+  const conflictError = (balance: unknown) =>
+    Object.assign(new AxiosError('conflict'), {
+      response: { status: 409, data: { error: 'changed', balance } },
+    });
+
+  beforeEach(() => setAdminUserBalance.mockReset());
+
+  it('sends the tokenCredits and the expected value, and caches the saved balance', async () => {
+    const saved = { userId: 'u1', tokenCredits: 7500, hasRecord: true };
+    setAdminUserBalance.mockResolvedValue(saved);
+    const client = quietClient();
+    const { result } = renderHook(() => useSetUserBalance(), { wrapper: makeWrapper(client) });
+
+    result.current.mutate({ userId: 'u1', tokenCredits: 7500, expectedTokenCredits: 5000 });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(setAdminUserBalance).toHaveBeenCalledWith('u1', {
+      tokenCredits: 7500,
+      expectedTokenCredits: 5000,
+    });
+    expect(client.getQueryData([QueryKeys.adminUserBalance, 'u1'])).toEqual(saved);
+  });
+
+  it('replaces the cached balance with the current one on a conflict', async () => {
+    const current = { userId: 'u1', tokenCredits: 3000, hasRecord: true };
+    setAdminUserBalance.mockRejectedValue(conflictError(current));
+    const client = quietClient();
+    client.setQueryData([QueryKeys.adminUserBalance, 'u1'], {
+      userId: 'u1',
+      tokenCredits: 5000,
+      hasRecord: true,
+    });
+    const { result } = renderHook(() => useSetUserBalance(), { wrapper: makeWrapper(client) });
+
+    result.current.mutate({ userId: 'u1', tokenCredits: 7500, expectedTokenCredits: 5000 });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(client.getQueryData([QueryKeys.adminUserBalance, 'u1'])).toEqual(current);
+  });
+
+  it('leaves the cache alone for a non-conflict failure', async () => {
+    setAdminUserBalance.mockRejectedValue(new Error('boom'));
+    const client = quietClient();
+    const before = { userId: 'u1', tokenCredits: 5000, hasRecord: true };
+    client.setQueryData([QueryKeys.adminUserBalance, 'u1'], before);
+    const { result } = renderHook(() => useSetUserBalance(), { wrapper: makeWrapper(client) });
+
+    result.current.mutate({ userId: 'u1', tokenCredits: 1 });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(client.getQueryData([QueryKeys.adminUserBalance, 'u1'])).toEqual(before);
+  });
+
+  it('getBalanceConflict only recognises a 409 that carries a balance', () => {
+    const balance = { userId: 'u1', tokenCredits: 1, hasRecord: true };
+    const withResponse = (status: number, data: unknown) =>
+      Object.assign(new AxiosError('x'), { response: { status, data } });
+    expect(getBalanceConflict(conflictError(balance))).toEqual(balance);
+    expect(getBalanceConflict(new Error('x'))).toBeNull();
+    expect(getBalanceConflict(withResponse(500, {}))).toBeNull();
+    expect(getBalanceConflict(withResponse(409, {}))).toBeNull();
   });
 });

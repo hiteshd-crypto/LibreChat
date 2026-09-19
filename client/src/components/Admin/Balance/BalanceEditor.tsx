@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input, Label, Spinner, useToastContext } from '@librechat/client';
-import { useAdminUserBalance, useSetUserBalance } from '~/data-provider';
+import { useAdminUserBalance, useSetUserBalance, getBalanceConflict } from '~/data-provider';
 import { getResponseErrorMessage } from '~/utils';
 import { NotificationSeverity } from '~/common';
 import { parseRate } from '../Pricing/rates';
@@ -57,7 +57,7 @@ export default function BalanceEditor({ userId, userName }: { userId: string; us
     }
     setError(null);
     setBalance.mutate(
-      { userId, tokenCredits },
+      { userId, tokenCredits, expectedTokenCredits: data.hasRecord ? data.tokenCredits : null },
       {
         onSuccess: () => {
           showToast({
@@ -66,11 +66,17 @@ export default function BalanceEditor({ userId, userName }: { userId: string; us
           });
           setEditing(false);
         },
-        onError: (err) =>
+        onError: (err) => {
+          const conflict = getBalanceConflict(err);
+          if (conflict) {
+            setError(localize('com_admin_balance_conflict', { 0: conflict.tokenCredits }));
+            return;
+          }
           showToast({
             message: getResponseErrorMessage(err, localize('com_admin_balance_save_error')),
             severity: NotificationSeverity.ERROR,
-          }),
+          });
+        },
       },
     );
   };

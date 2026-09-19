@@ -8,6 +8,10 @@ interface BalanceRecord {
   tokenCredits: number;
 }
 
+type BalanceSetResult =
+  | { status: 'updated'; balance: BalanceRecord }
+  | { status: 'conflict'; current: BalanceRecord | null };
+
 interface UserIdParams {
   userId?: string;
 }
@@ -19,6 +23,12 @@ export interface AdminBalanceDeps {
     user: string,
     fields: { tokenCredits: number },
   ) => Promise<BalanceRecord | null>;
+  /** Overwrites only if the stored balance still equals `expected` (`null` = no record existed). */
+  setBalanceIfUnchanged: (
+    user: string,
+    expected: number | null,
+    tokenCredits: number,
+  ) => Promise<BalanceSetResult>;
 }
 
 type BalanceHandler = (req: ServerRequest, res: Response) => Promise<Response>;
@@ -46,7 +56,7 @@ function toBalance(userId: string, record: BalanceRecord | null): TAdminUserBala
  * transaction path: it never records a transaction and never touches deduction logic.
  */
 export function createAdminBalanceHandlers(deps: AdminBalanceDeps): AdminBalanceHandlers {
-  const { getUserById, findBalanceByUser, upsertBalanceFields } = deps;
+  const { getUserById, findBalanceByUser, upsertBalanceFields, setBalanceIfUnchanged } = deps;
 
   function parseUserId(req: ServerRequest): string | null {
     const { userId } = req.params as UserIdParams;
@@ -77,16 +87,36 @@ export function createAdminBalanceHandlers(deps: AdminBalanceDeps): AdminBalance
       if (!userId) {
         return res.status(400).json({ error: 'Invalid user ID format' });
       }
-      const { tokenCredits } = (req.body ?? {}) as Partial<TAdminUserBalanceUpdateBody>;
+      const { tokenCredits, expectedTokenCredits } = (req.body ??
+        {}) as Partial<TAdminUserBalanceUpdateBody>;
       if (!isCredits(tokenCredits)) {
         return res.status(400).json({ error: 'tokenCredits must be a non-negative number' });
+      }
+      if (
+        expectedTokenCredits !== undefined &&
+        expectedTokenCredits !== null &&
+        !isCredits(expectedTokenCredits)
+      ) {
+        return res
+          .status(400)
+          .json({ error: 'expectedTokenCredits must be null or a non-negative number' });
       }
       const user = await getUserById(userId, '_id');
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-      const record = await upsertBalanceFields(userId, { tokenCredits });
-      return res.status(200).json(toBalance(userId, record));
+      if (expectedTokenCredits === undefined) {
+        const record = await upsertBalanceFields(userId, { tokenCredits });
+        return res.status(200).json(toBalance(userId, record));
+      }
+      const result = await setBalanceIfUnchanged(userId, expectedTokenCredits, tokenCredits);
+      if (result.status === 'conflict') {
+        return res.status(409).json({
+          error: 'The balance changed since it was loaded',
+          balance: toBalance(userId, result.current),
+        });
+      }
+      return res.status(200).json(toBalance(userId, result.balance));
     } catch (error) {
       logger.error('[adminBalance] setBalance error:', error);
       return res.status(500).json({ error: 'Failed to update user balance' });
