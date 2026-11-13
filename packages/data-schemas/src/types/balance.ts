@@ -10,6 +10,8 @@ export interface IBalance extends Document {
   refillIntervalUnit: RefillIntervalUnit;
   lastRefill: Date;
   refillAmount: number;
+  totalReceived: number;
+  lastAlertLevel: number;
   tenantId?: string;
 }
 

@@ -3,6 +3,7 @@ export { default as AccessView } from './Access/AccessView';
 export { default as DepartmentTreeRoute } from './Access/DepartmentTreeRoute';
 export { default as PricingView } from './Pricing/PricingView';
 export { default as BalanceView } from './Balance/BalanceView';
+export { default as TokenDistributionView } from './TokenDistribution/TokenDistributionView';
 export { default as UsersView } from './Users/UsersView';
 export { default as UserConversationsView } from './Users/UserConversationsView';
 export { default as ConversationTranscript } from './Users/ConversationTranscript';

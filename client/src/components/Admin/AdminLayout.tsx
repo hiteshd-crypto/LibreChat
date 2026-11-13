@@ -45,7 +45,12 @@ export default function AdminLayout() {
             ? item('/admin/access', localize('com_admin_hierarchy_title'))
             : null}
           {hierarchy?.isAdmin ? item('/admin/pricing', localize('com_admin_pricing_title')) : null}
-          {hierarchy?.isAdmin ? item('/admin/balance', localize('com_admin_balance_title')) : null}
+          {hierarchy?.isAdmin || isDeptHead
+            ? item('/admin/balance', localize('com_admin_balance_title'))
+            : null}
+          {hierarchy?.isAdmin || isDeptHead
+            ? item('/admin/token-distribution', localize('com_admin_token_title'))
+            : null}
           {item('/admin/users', localize('com_admin_users_title'))}
         </nav>
       </aside>

@@ -14,6 +14,16 @@ import type {
   TAdminPricingUpdateBody,
   TAdminPricingDeleteResponse,
   TAdminPricingMutationResponse,
+  TDepartmentGrantBody,
+  TDepartmentGrantResponse,
+  TDisbursePreviewRequest,
+  TDisbursePreviewResponse,
+  TDisburseConfirmRequest,
+  TDisburseConfirmResponse,
+  TTransferPreviewRequest,
+  TTransferPreviewResponse,
+  TTransferConfirmRequest,
+  TTransferConfirmResponse,
 } from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
 
@@ -127,8 +137,9 @@ export const useSetDepartmentHead = (): UseMutationResult<
   return useMutation(
     ({ departmentId, body }) => dataService.setAdminDepartmentHead(departmentId, body),
     {
-      onSuccess: () => {
+      onSuccess: (_data, { departmentId }) => {
         queryClient.invalidateQueries([QueryKeys.adminDepartments]);
+        queryClient.invalidateQueries([QueryKeys.adminDepartmentBalance, departmentId]);
       },
     },
   );
@@ -234,6 +245,109 @@ export const useSetUserBalance = (): UseMutationResult<
       if (current) {
         cacheBalance(current);
       }
+    },
+  });
+};
+
+/** A department pool's 409 conflict shapes — `pool_insufficient` (`{poolBalance, requested}`)
+ * or `pool_stale` (`{expectedPoolBalance, currentPoolBalance}`) — or `null` for any other error. */
+export const getPoolConflictError = (
+  error: unknown,
+): {
+  poolBalance?: number;
+  requested?: number;
+  expectedPoolBalance?: number;
+  currentPoolBalance?: number;
+} | null => {
+  if (!axios.isAxiosError(error) || error.response?.status !== 409) {
+    return null;
+  }
+  const data = error.response.data as Record<string, unknown>;
+  if ('poolBalance' in data || 'expectedPoolBalance' in data) {
+    return data as {
+      poolBalance?: number;
+      requested?: number;
+      expectedPoolBalance?: number;
+      currentPoolBalance?: number;
+    };
+  }
+  return null;
+};
+
+/** Super Admin: grants a lump sum into a department's pool. Single-step — a pure `$inc` can't
+ * go stale, so there is no preview/confirm dance. */
+export const useGrantDepartmentBalance = (): UseMutationResult<
+  TDepartmentGrantResponse,
+  Error,
+  { departmentId: string; body: TDepartmentGrantBody }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(
+    ({ departmentId, body }) => dataService.grantAdminDepartmentBalance(departmentId, body),
+    {
+      onSuccess: (_data, { departmentId }) => {
+        queryClient.invalidateQueries([QueryKeys.adminDepartmentBalance, departmentId]);
+      },
+    },
+  );
+};
+
+/** Department Head: previews an even-split disbursement out of the department pool to chosen
+ * members (the Head included — no root exclusion under this model). */
+export const useDisbursePreview = (): UseMutationResult<
+  TDisbursePreviewResponse,
+  Error,
+  TDisbursePreviewRequest
+> => useMutation((body) => dataService.previewDepartmentDisburse(body));
+
+export const useDisburseConfirm = (): UseMutationResult<
+  TDisburseConfirmResponse,
+  Error,
+  TDisburseConfirmRequest
+> => {
+  const queryClient = useQueryClient();
+  return useMutation((body) => dataService.confirmDepartmentDisburse(body), {
+    onSuccess: (data) => {
+      queryClient.invalidateQueries([QueryKeys.adminMyDepartmentMembers]);
+      // No departmentId on this "mine"-scoped request — invalidate the unparameterized
+      // prefix so the header's useDepartmentBalance(departmentId) query still refetches.
+      queryClient.invalidateQueries([QueryKeys.adminDepartmentBalance]);
+      data.rows.forEach((row) =>
+        queryClient.setQueryData([QueryKeys.adminUserBalance, row.userId], {
+          userId: row.userId,
+          tokenCredits: row.newBalance,
+          hasRecord: true,
+        }),
+      );
+    },
+  });
+};
+
+/** Department Head: previews a member-to-member rebalance (give <= take, bounded by what the
+ * source member actually has — never creates or destroys money). */
+export const useTransferPreview = (): UseMutationResult<
+  TTransferPreviewResponse,
+  Error,
+  TTransferPreviewRequest
+> => useMutation((body) => dataService.previewDepartmentTransfer(body));
+
+export const useTransferConfirm = (): UseMutationResult<
+  TTransferConfirmResponse,
+  Error,
+  TTransferConfirmRequest
+> => {
+  const queryClient = useQueryClient();
+  return useMutation((body) => dataService.confirmDepartmentTransfer(body), {
+    onSuccess: (data) => {
+      queryClient.invalidateQueries([QueryKeys.adminMyDepartmentMembers]);
+      queryClient.invalidateQueries([QueryKeys.adminDepartmentBalance]);
+      [data.from, data.to].forEach((side) =>
+        queryClient.setQueryData([QueryKeys.adminUserBalance, side.userId], {
+          userId: side.userId,
+          tokenCredits: side.newBalance,
+          hasRecord: true,
+        }),
+      );
     },
   });
 };

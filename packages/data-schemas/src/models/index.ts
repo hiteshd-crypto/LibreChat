@@ -6,6 +6,7 @@ import { createOpenIDRefreshFlightModel } from './openidRefreshFlight';
 import { createAgentTriggerUserPurgeModel } from './triggerUserPurge';
 import { createRefreshTokenBridgeModel } from './refreshTokenBridge';
 import { createAgentTriggerDeliveryModel } from './triggerDelivery';
+import { createDepartmentBalanceModel } from './departmentBalance';
 import { createSkillSyncStatusModel } from './skillSyncStatus';
 import { createConversationTagModel } from './conversationTag';
 import { createCodeEnvironmentModel } from './codeEnvironment';
@@ -65,6 +66,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
   MCPServer: ReturnType<typeof createMCPServerModel>;
   Role: ReturnType<typeof createRoleModel>;
   Department: ReturnType<typeof createDepartmentModel>;
+  DepartmentBalance: ReturnType<typeof createDepartmentBalanceModel>;
   Action: ReturnType<typeof createActionModel>;
   Assistant: ReturnType<typeof createAssistantModel>;
   File: ReturnType<typeof createFileModel>;
@@ -116,6 +118,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
     MCPServer: createMCPServerModel(mongoose),
     Role: createRoleModel(mongoose),
     Department: createDepartmentModel(mongoose),
+    DepartmentBalance: createDepartmentBalanceModel(mongoose),
     Action: createActionModel(mongoose),
     Assistant: createAssistantModel(mongoose),
     File: createFileModel(mongoose),

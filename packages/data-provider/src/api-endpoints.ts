@@ -533,6 +533,15 @@ export const adminDepartment = (departmentId: string) =>
 export const adminMyDepartment = () => `${adminDepartments()}/mine`;
 export const adminDepartmentHead = (departmentId: string) =>
   `${adminDepartment(departmentId)}/head`;
+export const adminDepartmentBalance = (departmentId: string) =>
+  `${adminDepartment(departmentId)}/balance`;
+export const adminDepartmentGrant = (departmentId: string) =>
+  `${adminDepartment(departmentId)}/grant`;
+export const adminMyDepartmentMembers = () => `${adminMyDepartment()}/members`;
+export const adminMyDepartmentDisbursePreview = () => `${adminMyDepartment()}/disburse/preview`;
+export const adminMyDepartmentDisburseConfirm = () => `${adminMyDepartment()}/disburse/confirm`;
+export const adminMyDepartmentTransferPreview = () => `${adminMyDepartment()}/transfer/preview`;
+export const adminMyDepartmentTransferConfirm = () => `${adminMyDepartment()}/transfer/confirm`;
 export const adminPricing = () => `${BASE_URL}/api/admin/pricing`;
 export const adminPricingRate = (modelKey: string) =>
   `${adminPricing()}/${encodeURIComponent(modelKey)}`;

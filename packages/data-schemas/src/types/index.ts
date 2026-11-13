@@ -21,6 +21,7 @@ export * from './agentCategory';
 export * from './codeEnvironment';
 export * from './role';
 export * from './department';
+export * from './departmentBalance';
 export * from './action';
 export * from './assistant';
 export * from './file';

@@ -135,6 +135,8 @@
     "migrate:role-keys": "node config/migrate-role-keys.js",
     "migrate:departments:dry-run": "node config/migrate-departments.js --dry-run",
     "migrate:departments": "node config/migrate-departments.js",
+    "migrate:department-balances:dry-run": "node config/migrate-department-balances.js --dry-run",
+    "migrate:department-balances": "node config/migrate-department-balances.js",
     "migrate:shared-link-permissions:dry-run": "node config/migrate-shared-link-permissions.js --dry-run",
     "migrate:shared-link-permissions": "node config/migrate-shared-link-permissions.js",
     "migrate:shared-link-permissions:batch": "node config/migrate-shared-link-permissions.js --batch-size=50",

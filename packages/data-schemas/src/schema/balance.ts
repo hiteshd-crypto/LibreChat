@@ -37,6 +37,17 @@ const balanceSchema: Schema<t.IBalance> = new Schema<t.IBalance>({
     type: Number,
     default: 0,
   },
+  // Cumulative sum of every disbursement/transfer/grant this user has ever
+  // received — the denominator for their own spend-threshold alerts.
+  totalReceived: {
+    type: Number,
+    default: 0,
+  },
+  // The last spend-threshold level (0 | 80 | 100) a notification was sent for.
+  lastAlertLevel: {
+    type: Number,
+    default: 0,
+  },
   tenantId: {
     type: String,
     index: true,

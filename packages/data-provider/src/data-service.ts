@@ -1485,6 +1485,47 @@ export function getMyDepartment(): Promise<{ department: adm.TDepartment }> {
   return request.get(endpoints.adminMyDepartment());
 }
 
+export function getAdminDepartmentBalance(
+  departmentId: string,
+): Promise<adm.TDepartmentBalanceResponse> {
+  return request.get(endpoints.adminDepartmentBalance(departmentId));
+}
+
+export function grantAdminDepartmentBalance(
+  departmentId: string,
+  body: adm.TDepartmentGrantBody,
+): Promise<adm.TDepartmentGrantResponse> {
+  return request.post(endpoints.adminDepartmentGrant(departmentId), body);
+}
+
+export function getMyDepartmentMembers(): Promise<adm.TDepartmentMembersResponse> {
+  return request.get(endpoints.adminMyDepartmentMembers());
+}
+
+export function previewDepartmentDisburse(
+  body: adm.TDisbursePreviewRequest,
+): Promise<adm.TDisbursePreviewResponse> {
+  return request.post(endpoints.adminMyDepartmentDisbursePreview(), body);
+}
+
+export function confirmDepartmentDisburse(
+  body: adm.TDisburseConfirmRequest,
+): Promise<adm.TDisburseConfirmResponse> {
+  return request.post(endpoints.adminMyDepartmentDisburseConfirm(), body);
+}
+
+export function previewDepartmentTransfer(
+  body: adm.TTransferPreviewRequest,
+): Promise<adm.TTransferPreviewResponse> {
+  return request.post(endpoints.adminMyDepartmentTransferPreview(), body);
+}
+
+export function confirmDepartmentTransfer(
+  body: adm.TTransferConfirmRequest,
+): Promise<adm.TTransferConfirmResponse> {
+  return request.post(endpoints.adminMyDepartmentTransferConfirm(), body);
+}
+
 /** Wraps an existing top-level role as an already-created, still-empty department's head. */
 export function setAdminDepartmentHead(
   departmentId: string,

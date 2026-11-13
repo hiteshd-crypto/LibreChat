@@ -1,4 +1,5 @@
 import type { DepartmentMethods, DepartmentDeps } from './department';
+import type { DepartmentBalanceMethods } from './departmentBalance';
 import type { RoleMethods, RoleDeps } from './role';
 import type { PricingMethods } from './pricing';
 import type { BalanceMethods } from './balance';
@@ -15,6 +16,7 @@ import { createUserMethods, DEFAULT_SESSION_EXPIRY, type UserMethods } from './u
 import { createFileMethods, type FileMethods, type FileOwnerScope } from './file';
 import { createDepartmentMethods, DepartmentConflictError } from './department';
 import { createPricingMethods, PricingConflictError } from './pricing';
+import { createDepartmentBalanceMethods } from './departmentBalance';
 import { createTokenMethods, type TokenMethods } from './token';
 import { createRoleMethods, RoleConflictError } from './role';
 import { createKeyMethods, type KeyMethods } from './key';
@@ -219,6 +221,7 @@ export type AllMethods = UserMethods &
   OpenIDRefreshFlightMethods &
   RoleMethods &
   DepartmentMethods &
+  DepartmentBalanceMethods &
   KeyMethods &
   FileMethods &
   MemoryMethods &
@@ -410,6 +413,7 @@ export function createMethods(
     grantCapability: systemGrantMethods.grantCapability,
   };
   const departmentMethods = createDepartmentMethods(mongoose, departmentDeps);
+  const departmentBalanceMethods = createDepartmentBalanceMethods(mongoose);
 
   const promptDeps: PromptDeps = {
     removeAllPermissions,
@@ -447,6 +451,7 @@ export function createMethods(
     ...createOpenIDRefreshFlightMethods(mongoose),
     ...roleMethods,
     ...departmentMethods,
+    ...departmentBalanceMethods,
     ...createKeyMethods(mongoose),
     ...createFileMethods(mongoose),
     ...createMemoryMethods(mongoose),
@@ -505,6 +510,7 @@ export type {
   OpenIDRefreshFlightMethods,
   RoleMethods,
   DepartmentMethods,
+  DepartmentBalanceMethods,
   KeyMethods,
   FileMethods,
   FileOwnerScope,

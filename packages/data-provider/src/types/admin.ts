@@ -58,6 +58,111 @@ export interface TSetDepartmentHeadBody {
   roleKey: string;
 }
 
+/** A department's balance: pool balance + the sum of every member's personal `tokenCredits` —
+ * the department's total wealth under this model. From `GET /api/admin/departments/:id/balance`. */
+export interface TDepartmentBalanceResponse {
+  poolBalance: number;
+  totalBalance: number;
+}
+
+export interface TDepartmentGrantBody {
+  amount: number;
+}
+
+export interface TDepartmentGrantResponse {
+  poolBalance: number;
+}
+
+/** One member of the caller's own department (DEPARTMENT_HEAD included — no root exclusion). */
+export interface TDepartmentMember {
+  userId: string;
+  name: string;
+  email: string;
+}
+
+export interface TDepartmentMembersResponse {
+  members: TDepartmentMember[];
+}
+
+export interface TDisbursePreviewRequest {
+  recipientUserIds: string[];
+  totalAmount: number;
+}
+
+export interface TDisbursePreviewRow {
+  userId: string;
+  name: string;
+  currentBalance: number;
+  newBalance: number;
+}
+
+export interface TDisbursePreviewResponse {
+  poolBalance: number;
+  perRecipientAmount: number;
+  rows: TDisbursePreviewRow[];
+}
+
+export interface TDisburseConfirmRequest {
+  recipientUserIds: string[];
+  totalAmount: number;
+  expectedPoolBalance: number;
+  /** The current balances shown in the preview, keyed by userId — a staleness check only; the
+   * server always recomputes the actual allocation and new balances itself. */
+  expectedBalances: Record<string, number>;
+}
+
+export interface TDisburseConfirmRow {
+  userId: string;
+  name: string;
+  previousBalance: number;
+  newBalance: number;
+}
+
+export interface TDisburseConfirmResponse {
+  poolBalance: number;
+  rows: TDisburseConfirmRow[];
+  committedAt: string;
+}
+
+export interface TTransferPreviewRequest {
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+}
+
+export interface TTransferSide {
+  userId: string;
+  name: string;
+  currentBalance: number;
+  newBalance: number;
+}
+
+export interface TTransferPreviewResponse {
+  from: TTransferSide;
+  to: TTransferSide;
+}
+
+export interface TTransferConfirmRequest {
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+  expectedFromBalance: number;
+  expectedToBalance: number;
+}
+
+export interface TTransferConfirmSide {
+  userId: string;
+  name: string;
+  previousBalance: number;
+  newBalance: number;
+}
+
+export interface TTransferConfirmResponse {
+  from: TTransferConfirmSide;
+  to: TTransferConfirmSide;
+  committedAt: string;
+}
+
 export interface TAdminRoleListResponse {
   roles: Array<TAdminRole & { _id?: string }>;
   total: number;

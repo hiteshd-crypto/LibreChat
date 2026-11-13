@@ -13,6 +13,8 @@ import type {
   TAdminUserListResponse,
   TDepartmentListResponse,
   TAdminUserSearchResponse,
+  TDepartmentBalanceResponse,
+  TDepartmentMembersResponse,
   TAdminUserConversationsResponse,
 } from 'librechat-data-provider';
 import type {
@@ -92,6 +94,28 @@ export const useMyDepartment = (
       staleTime: 30_000,
       ...config,
     },
+  );
+
+/** A department's balance: pool + the sum of every member's personal balance. Used by both the
+ * Super Admin's grant dialog and the Department Head's own balance view. */
+export const useDepartmentBalance = (
+  departmentId: string,
+  config?: UseQueryOptions<TDepartmentBalanceResponse>,
+): QueryObserverResult<TDepartmentBalanceResponse> =>
+  useQuery<TDepartmentBalanceResponse>(
+    [QueryKeys.adminDepartmentBalance, departmentId],
+    () => dataService.getAdminDepartmentBalance(departmentId),
+    { enabled: !!departmentId, refetchOnWindowFocus: false, ...config },
+  );
+
+/** The caller's own department's members (DEPARTMENT_HEAD only) — includes the caller. */
+export const useMyDepartmentMembers = (
+  config?: UseQueryOptions<TDepartmentMembersResponse>,
+): QueryObserverResult<TDepartmentMembersResponse> =>
+  useQuery<TDepartmentMembersResponse>(
+    [QueryKeys.adminMyDepartmentMembers],
+    () => dataService.getMyDepartmentMembers(),
+    { refetchOnWindowFocus: false, ...config },
   );
 
 export const useAdminRoleMembers = (
