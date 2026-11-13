@@ -227,6 +227,22 @@ export const updateTokenCount = (text: string) => {
   return request.post(endpoints.tokenizer(), { arg: text });
 };
 
+export function listNotifications(params?: {
+  limit?: number;
+  offset?: number;
+  unreadOnly?: boolean;
+}): Promise<q.TNotificationListResponse> {
+  return request.get(endpoints.notifications(params));
+}
+
+export function getUnreadNotificationCount(): Promise<q.TUnreadNotificationCountResponse> {
+  return request.get(endpoints.unreadNotificationCount());
+}
+
+export function markNotificationRead(id: string): Promise<q.TNotification> {
+  return request.patch(endpoints.markNotificationRead(id), {});
+}
+
 export const login = (payload: t.TLoginUser): Promise<t.TLoginResponse> => {
   return request.post(endpoints.login(), payload);
 };

@@ -1134,9 +1134,15 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
             endpointTokenConfig: primaryConfig.endpointTokenConfig,
             resolveEndpointTokenConfig,
           },
-        ).catch((err) => {
-          logger.error('[OpenAI API] Error recording usage:', getSafeErrorMetadata(err));
-        }),
+        )
+          .then(() => {
+            if (typeof db.checkUserOwnThreshold === 'function') {
+              return db.checkUserOwnThreshold(userId);
+            }
+          })
+          .catch((err) => {
+            logger.error('[OpenAI API] Error recording usage:', getSafeErrorMetadata(err));
+          }),
       );
 
       const usage = buildCompletionUsage(collectedUsage);

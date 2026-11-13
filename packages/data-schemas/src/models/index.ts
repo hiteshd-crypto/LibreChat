@@ -11,6 +11,7 @@ import { createSkillSyncStatusModel } from './skillSyncStatus';
 import { createConversationTagModel } from './conversationTag';
 import { createCodeEnvironmentModel } from './codeEnvironment';
 import { createAgentCategoryModel } from './agentCategory';
+import { createNotificationModel } from './notification';
 import { createChatProjectModel } from './chatProject';
 import { createAgentApiKeyModel } from './agentApiKey';
 import { createTransactionModel } from './transaction';
@@ -67,6 +68,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
   Role: ReturnType<typeof createRoleModel>;
   Department: ReturnType<typeof createDepartmentModel>;
   DepartmentBalance: ReturnType<typeof createDepartmentBalanceModel>;
+  Notification: ReturnType<typeof createNotificationModel>;
   Action: ReturnType<typeof createActionModel>;
   Assistant: ReturnType<typeof createAssistantModel>;
   File: ReturnType<typeof createFileModel>;
@@ -119,6 +121,7 @@ export function createModels(mongoose: typeof import('mongoose')): {
     Role: createRoleModel(mongoose),
     Department: createDepartmentModel(mongoose),
     DepartmentBalance: createDepartmentBalanceModel(mongoose),
+    Notification: createNotificationModel(mongoose),
     Action: createActionModel(mongoose),
     Assistant: createAssistantModel(mongoose),
     File: createFileModel(mongoose),

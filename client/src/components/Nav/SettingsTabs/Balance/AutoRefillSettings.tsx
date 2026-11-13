@@ -6,6 +6,7 @@ import type { RefillIntervalUnit, TBalanceResponse } from 'librechat-data-provid
 import type { TranslationKeys } from '~/hooks';
 
 import { useLocalize, useClockFormat } from '~/hooks';
+import { creditsToInr, formatInr } from '~/utils';
 
 function ensureExhaustive(value: never): void {
   void value;
@@ -70,7 +71,7 @@ const AutoRefillSettings: React.FC<AutoRefillSettingsProps> = ({
       </div>
       <div className="mb-1 flex justify-between text-sm">
         <span>{localize('com_nav_balance_refill_amount')}</span>
-        <span>{refillAmount !== undefined ? refillAmount : '-'}</span>
+        <span>{refillAmount !== undefined ? formatInr(creditsToInr(refillAmount)) : '-'}</span>
       </div>
       <div className="mb-1 flex justify-between text-sm">
         <span>{localize('com_nav_balance_interval')}</span>

@@ -96,6 +96,15 @@ async function spendCollectedUsage({
   // The collectedUsage array is shared by reference with AgentClient.collectedUsage,
   // so clearing it here ensures recordCollectedUsage() sees an empty array and returns early.
   collectedUsage.length = 0;
+
+  /** The generation already stopped by the time a user aborts, so there's no live
+   * stream left to push an instant event over — the modal's own short poll picks
+   * this up; it just needs the check to actually run at all. */
+  if (typeof db.checkUserOwnThreshold === 'function') {
+    db.checkUserOwnThreshold(userId).catch((err) => {
+      logger.error('[abortMiddleware] Failed to check spend-threshold alert', err);
+    });
+  }
 }
 
 /**

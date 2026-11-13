@@ -3161,6 +3161,43 @@ class AgentClient extends BaseClient {
     if (result && updateStreamUsage) {
       this.usage = result;
     }
+
+    this.notifySpendThresholdIfCrossed();
+  }
+
+  /**
+   * Fire-and-forget: recomputes the spending user's own 80%/100% threshold right
+   * after a real chat spend settles, and — when it just crossed one — pushes a
+   * lightweight event over this turn's already-open stream so the client refetches
+   * notifications immediately instead of waiting for its next poll.
+   */
+  notifySpendThresholdIfCrossed() {
+    const userId = this.user ?? this.options.req?.user?.id;
+    if (!userId || typeof db.checkUserOwnThreshold !== 'function') {
+      return;
+    }
+    const res = this.options.res;
+    const streamId = this.options.req?._resumableStreamId || null;
+    const jobCreatedAt = this.jobCreatedAt;
+    (async () => {
+      try {
+        const crossed = await db.checkUserOwnThreshold(userId);
+        if (!crossed) {
+          return;
+        }
+        if (streamId) {
+          await GenerationJobManager.emitChunk(
+            streamId,
+            { event: UsageEvents.ON_SPEND_THRESHOLD, data: {} },
+            { expectedCreatedAt: jobCreatedAt },
+          );
+        } else if (res) {
+          sendEvent(res, { event: UsageEvents.ON_SPEND_THRESHOLD, data: {} });
+        }
+      } catch (err) {
+        logger.error('[AgentClient] Failed to check/emit spend-threshold alert', err);
+      }
+    })();
   }
 
   /**

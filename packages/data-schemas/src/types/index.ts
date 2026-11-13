@@ -22,6 +22,7 @@ export * from './codeEnvironment';
 export * from './role';
 export * from './department';
 export * from './departmentBalance';
+export * from './notification';
 export * from './action';
 export * from './assistant';
 export * from './file';

@@ -1245,9 +1245,15 @@ const executeResponse = async (envelope, { req, res }) => {
               endpointTokenConfig: primaryConfig.endpointTokenConfig,
               resolveEndpointTokenConfig,
             },
-          ).catch((err) => {
-            logger.error('[Responses API] Error recording usage:', getSafeErrorMetadata(err));
-          }),
+          )
+            .then(() => {
+              if (typeof db.checkUserOwnThreshold === 'function') {
+                return db.checkUserOwnThreshold(userId);
+              }
+            })
+            .catch((err) => {
+              logger.error('[Responses API] Error recording usage:', getSafeErrorMetadata(err));
+            }),
         );
 
         const usage = buildResponsesUsage(collectedUsage);
@@ -1456,9 +1462,15 @@ const executeResponse = async (envelope, { req, res }) => {
               endpointTokenConfig: primaryConfig.endpointTokenConfig,
               resolveEndpointTokenConfig,
             },
-          ).catch((err) => {
-            logger.error('[Responses API] Error recording usage:', getSafeErrorMetadata(err));
-          }),
+          )
+            .then(() => {
+              if (typeof db.checkUserOwnThreshold === 'function') {
+                return db.checkUserOwnThreshold(userId);
+              }
+            })
+            .catch((err) => {
+              logger.error('[Responses API] Error recording usage:', getSafeErrorMetadata(err));
+            }),
         );
 
         if (artifactPromises.length > 0) {

@@ -15,6 +15,7 @@ import {
 import { ArchivedChatsModal } from '~/components/Nav/SettingsTabs/General/ArchivedChatsModal';
 import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
 import { useAuthContext } from '~/hooks/AuthContext';
+import { creditsToInr, formatInr } from '~/utils';
 import { useLocalize } from '~/hooks';
 import Settings from './Settings';
 import store from '~/store';
@@ -146,7 +147,7 @@ function AccountSettings({ collapsed = false }: { collapsed?: boolean }) {
           <>
             <div className="text-token-text-secondary ml-3 mr-2 py-2 text-sm" role="note">
               {localize('com_nav_balance')}:{' '}
-              {new Intl.NumberFormat().format(Math.round(balanceQuery.data.tokenCredits))}
+              {formatInr(creditsToInr(balanceQuery.data.tokenCredits))}
             </div>
             <DropdownMenuSeparator />
           </>

@@ -26,6 +26,7 @@ import {
   useFileMap,
 } from '~/hooks';
 import KeyboardShortcutsDialog from '~/components/Nav/KeyboardShortcutsDialog';
+import SpendAlertModal from '~/components/Nav/Notifications/SpendAlertModal';
 import KeyboardDeleteDialog from '~/components/Nav/KeyboardDeleteDialog';
 import { useUserTermsQuery, useGetStartupConfig } from '~/data-provider';
 import { MobileDrawerScrim } from '~/components/UnifiedSidebar/mobile';
@@ -196,6 +197,7 @@ export default function Root() {
               </div>
             </PromptGroupsProvider>
             <KeyboardShortcutsProvider />
+            <SpendAlertModal />
           </AgentsMapContext.Provider>
           {config?.interface?.termsOfService?.modalAcceptance === true && (
             <TermsAndConditionsModal

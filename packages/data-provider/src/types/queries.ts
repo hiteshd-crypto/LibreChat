@@ -302,3 +302,28 @@ export type GraphTokenResponse = {
   expires_in: number;
   scope: string;
 };
+
+/* Notifications */
+export type TNotificationSeverity = 'info' | 'success' | 'warning' | 'error';
+
+export type TNotification = {
+  _id: string;
+  user: string;
+  type: string;
+  title: string;
+  message: string;
+  severity: TNotificationSeverity;
+  metadata?: Record<string, unknown>;
+  read: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TNotificationListResponse = {
+  notifications: TNotification[];
+  total: number;
+};
+
+export type TUnreadNotificationCountResponse = {
+  count: number;
+};

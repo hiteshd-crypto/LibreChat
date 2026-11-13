@@ -27,6 +27,7 @@ const prompts = require('./prompts');
 const schedules = require('./schedules');
 const skills = require('./skills');
 const balance = require('./balance');
+const notifications = require('./notifications');
 const actions = require('./actions');
 const apiKeys = require('./apiKeys');
 const banner = require('./banner');
@@ -89,6 +90,7 @@ module.exports = {
   actions,
   presets,
   balance,
+  notifications,
   messages,
   memories,
   endpoints,

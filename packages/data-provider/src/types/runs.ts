@@ -86,6 +86,10 @@ export type PtcToolCallEvent = {
 export enum UsageEvents {
   ON_CONTEXT_USAGE = 'on_context_usage',
   ON_TOKEN_USAGE = 'on_token_usage',
+  /** Pushed right after a real chat spend crosses the user's own 80%/100%
+   * threshold, so the already-open stream can nudge the client to refetch
+   * notifications immediately instead of waiting for the next poll. */
+  ON_SPEND_THRESHOLD = 'on_spend_threshold',
 }
 
 /**

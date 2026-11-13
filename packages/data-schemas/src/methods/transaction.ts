@@ -71,6 +71,12 @@ export function createTransactionMethods(
     getMultiplier: (params: MultiplierParams) => number;
     getCacheMultiplier: (params: CacheMultiplierParams) => number | null;
   },
+  hooks?: {
+    /** Fired, non-blocking, after a spend (never a refill/credit) updates a user's
+     * balance — the hook point for spend-threshold alerts. Must never throw into
+     * the caller; failures are only logged. */
+    onSpend?: (userId: string) => void;
+  },
 ): {
   updateBalance: ({
     user,
@@ -202,6 +208,21 @@ export function createTransactionMethods(
         );
       }
     }
+  }
+
+  /** Fires `hooks.onSpend` for an actual spend (negative increment) without ever
+   * blocking or throwing into the caller's response path. */
+  function fireOnSpend(userId: string, incrementValue: number): void {
+    if (incrementValue >= 0 || !hooks?.onSpend) {
+      return;
+    }
+    setImmediate(() => {
+      try {
+        hooks?.onSpend?.(userId);
+      } catch (error) {
+        logger.error(`[onSpend] hook failed for user ${userId}:`, error);
+      }
+    });
   }
 
   /**
@@ -363,6 +384,7 @@ export function createTransactionMethods(
       user: transaction.user as string,
       incrementValue,
     });
+    fireOnSpend(transaction.user as string, incrementValue);
 
     return {
       rate: transaction.rate as number,
@@ -402,6 +424,7 @@ export function createTransactionMethods(
       user: transaction.user as string,
       incrementValue,
     });
+    fireOnSpend(transaction.user as string, incrementValue);
 
     return {
       rate: transaction.rate as number,

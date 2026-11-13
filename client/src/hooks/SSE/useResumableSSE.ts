@@ -2076,6 +2076,12 @@ export default function useResumableSSE(
             return;
           }
 
+          if (data.event === UsageEvents.ON_SPEND_THRESHOLD) {
+            queryClient.invalidateQueries([QueryKeys.notifications]);
+            queryClient.invalidateQueries([QueryKeys.unreadNotificationCount]);
+            return;
+          }
+
           if (data.event === ApprovalEvents.ON_PENDING_ACTION) {
             applyPendingActionToMessages(data.data as Agents.PendingAction);
             setIsSubmitting(true);

@@ -13,6 +13,7 @@ import { cn } from '~/utils';
 import store from '~/store';
 
 const AccountSettings = lazy(() => import('~/components/Nav/AccountSettings'));
+const NotificationBell = lazy(() => import('~/components/Nav/Notifications/NotificationBell'));
 
 const NewChatButton = memo(function NewChatButton({
   setActive,
@@ -194,7 +195,10 @@ function ExpandedPanel({
         ))}
       </div>
 
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-1">
+        <Suspense fallback={<Skeleton className="h-9 w-9 rounded-lg" />}>
+          <NotificationBell />
+        </Suspense>
         <Suspense fallback={<Skeleton className="h-9 w-9 rounded-lg" />}>
           <AccountSettings collapsed />
         </Suspense>

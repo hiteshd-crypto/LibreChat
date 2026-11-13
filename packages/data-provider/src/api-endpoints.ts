@@ -46,6 +46,12 @@ export const userPreferences = () => `${user()}/preferences`;
 
 export const balance = () => `${BASE_URL}/api/balance`;
 
+export const notifications = (params?: { limit?: number; offset?: number; unreadOnly?: boolean }) =>
+  `${BASE_URL}/api/notifications${buildQuery(params ?? {})}`;
+export const unreadNotificationCount = () => `${BASE_URL}/api/notifications/unread-count`;
+export const markNotificationRead = (id: string) =>
+  `${BASE_URL}/api/notifications/${encodeURIComponent(id)}/read`;
+
 export const userPlugins = () => `${BASE_URL}/api/user/plugins`;
 
 export const deleteUser = () => `${BASE_URL}/api/user/delete`;

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Label, InfoHoverCard, ESide } from '@librechat/client';
+import { creditsToInr, formatInr } from '~/utils';
 import { useLocalize } from '~/hooks';
 
 interface TokenCreditsItemProps {
@@ -17,9 +18,9 @@ const TokenCreditsItem: React.FC<TokenCreditsItemProps> = ({ tokenCredits }) => 
         <InfoHoverCard side={ESide.Bottom} text={localize('com_nav_info_balance')} />
       </div>
 
-      {/* Right Section: tokenCredits Value */}
+      {/* Right Section: Balance in INR */}
       <span className="text-sm font-medium text-text-primary" role="note">
-        {tokenCredits !== undefined ? tokenCredits.toFixed(2) : '0.00'}
+        {formatInr(creditsToInr(tokenCredits ?? 0))}
       </span>
     </div>
   );

@@ -1,5 +1,7 @@
 import type { DepartmentMethods, DepartmentDeps } from './department';
 import type { DepartmentBalanceMethods } from './departmentBalance';
+import type { NotificationMethods } from './notification';
+import type { SpendAlertMethods } from './spendAlert';
 import type { RoleMethods, RoleDeps } from './role';
 import type { PricingMethods } from './pricing';
 import type { BalanceMethods } from './balance';
@@ -19,7 +21,9 @@ import { createPricingMethods, PricingConflictError } from './pricing';
 import { createDepartmentBalanceMethods } from './departmentBalance';
 import { createTokenMethods, type TokenMethods } from './token';
 import { createRoleMethods, RoleConflictError } from './role';
+import { createNotificationMethods } from './notification';
 import { createKeyMethods, type KeyMethods } from './key';
+import { createSpendAlertMethods } from './spendAlert';
 import { createBalanceMethods } from './balance';
 /* Memories */
 import { createMemoryMethods, type MemoryMethods } from './memory';
@@ -222,6 +226,8 @@ export type AllMethods = UserMethods &
   RoleMethods &
   DepartmentMethods &
   DepartmentBalanceMethods &
+  NotificationMethods &
+  SpendAlertMethods &
   KeyMethods &
   FileMethods &
   MemoryMethods &
@@ -296,11 +302,19 @@ export function createMethods(
   };
   const txMethods = createTxMethods(mongoose, txDeps);
 
+  // Late-bound: the spend-alert checker depends on department/role/balance methods
+  // created further below, but must be wired into transaction methods now.
+  const spendAlertChecker: { current?: (userId: string) => void } = {};
+
   // Tier 3: transaction methods need tx's getMultiplier/getCacheMultiplier
-  const transactionMethods = createTransactionMethods(mongoose, {
-    getMultiplier: txMethods.getMultiplier,
-    getCacheMultiplier: txMethods.getCacheMultiplier,
-  });
+  const transactionMethods = createTransactionMethods(
+    mongoose,
+    {
+      getMultiplier: txMethods.getMultiplier,
+      getCacheMultiplier: txMethods.getCacheMultiplier,
+    },
+    { onSpend: (userId) => spendAlertChecker.current?.(userId) },
+  );
 
   // Tier 3: spendTokens methods need transaction methods
   const spendTokensMethods = createSpendTokensMethods(mongoose, {
@@ -414,6 +428,17 @@ export function createMethods(
   };
   const departmentMethods = createDepartmentMethods(mongoose, departmentDeps);
   const departmentBalanceMethods = createDepartmentBalanceMethods(mongoose);
+  const notificationMethods = createNotificationMethods(mongoose);
+  const userMethods = createUserMethods(mongoose, { getCache: deps.getCache });
+  const balanceMethods = createBalanceMethods(mongoose);
+  const spendAlertMethods = createSpendAlertMethods({
+    getDepartmentForRoleKey: departmentMethods.getDepartmentForRoleKey,
+    findUsers: userMethods.findUsers,
+    getBalanceRecord: balanceMethods.getBalanceRecord,
+    setUserAlertLevel: balanceMethods.setUserAlertLevel,
+    createNotification: notificationMethods.createNotification,
+  });
+  spendAlertChecker.current = spendAlertMethods.checkUserOwnThreshold;
 
   const promptDeps: PromptDeps = {
     removeAllPermissions,
@@ -444,7 +469,7 @@ export function createMethods(
   };
   const agentMethods = createAgentMethods(mongoose, agentDeps);
   return {
-    ...createUserMethods(mongoose, { getCache: deps.getCache }),
+    ...userMethods,
     ...createSessionMethods(mongoose),
     ...createTokenMethods(mongoose),
     ...createRefreshTokenBridgeMethods(mongoose),
@@ -452,6 +477,8 @@ export function createMethods(
     ...roleMethods,
     ...departmentMethods,
     ...departmentBalanceMethods,
+    ...notificationMethods,
+    ...spendAlertMethods,
     ...createKeyMethods(mongoose),
     ...createFileMethods(mongoose),
     ...createMemoryMethods(mongoose),
@@ -462,7 +489,7 @@ export function createMethods(
     ...createCodeEnvironmentMethods(mongoose),
     ...createAccessRoleMethods(mongoose),
     ...createPricingMethods(mongoose),
-    ...createBalanceMethods(mongoose),
+    ...balanceMethods,
     ...userGroupMethods,
     ...aclEntryMethods,
     ...systemGrantMethods,
@@ -511,6 +538,8 @@ export type {
   RoleMethods,
   DepartmentMethods,
   DepartmentBalanceMethods,
+  NotificationMethods,
+  SpendAlertMethods,
   KeyMethods,
   FileMethods,
   FileOwnerScope,

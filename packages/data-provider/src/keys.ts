@@ -79,6 +79,8 @@ export enum QueryKeys {
   health = 'health',
   userTerms = 'userTerms',
   banner = 'banner',
+  notifications = 'notifications',
+  unreadNotificationCount = 'unreadNotificationCount',
   /* Memories */
   memories = 'memories',
   principalSearch = 'principalSearch',
@@ -122,6 +124,7 @@ export const DynamicQueryKeys = {
 } as const;
 
 export enum MutationKeys {
+  markNotificationRead = 'markNotificationRead',
   subagentControl = 'subagentControl',
   enqueueAgentQueuedTurn = 'enqueueAgentQueuedTurn',
   cancelAgentQueuedTurn = 'cancelAgentQueuedTurn',
