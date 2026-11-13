@@ -16,7 +16,7 @@ export function useAdminGuard(): React.ReactElement | null {
   if (isLoading) {
     return null;
   }
-  if (!data?.isAdmin && !data?.canViewSubordinates) {
+  if (!data?.isAdmin && !data?.canViewSubordinates && !data?.departmentHead) {
     return <Navigate to="/c/new" replace />;
   }
   return null;

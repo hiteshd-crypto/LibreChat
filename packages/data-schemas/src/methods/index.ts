@@ -1,3 +1,4 @@
+import type { DepartmentMethods, DepartmentDeps } from './department';
 import type { RoleMethods, RoleDeps } from './role';
 import type { PricingMethods } from './pricing';
 import type { BalanceMethods } from './balance';
@@ -12,6 +13,7 @@ import {
 import { createSessionMethods, DEFAULT_REFRESH_TOKEN_EXPIRY, type SessionMethods } from './session';
 import { createUserMethods, DEFAULT_SESSION_EXPIRY, type UserMethods } from './user';
 import { createFileMethods, type FileMethods, type FileOwnerScope } from './file';
+import { createDepartmentMethods, DepartmentConflictError } from './department';
 import { createPricingMethods, PricingConflictError } from './pricing';
 import { createTokenMethods, type TokenMethods } from './token';
 import { createRoleMethods, RoleConflictError } from './role';
@@ -174,6 +176,7 @@ import { createInsightsMethods, type InsightsMethods } from './insights';
 export {
   runAfterTransaction,
   RoleConflictError,
+  DepartmentConflictError,
   PricingConflictError,
   MCPAuthorityProofError,
   MAX_MCP_AUTHORITY_TARGETS,
@@ -215,6 +218,7 @@ export type AllMethods = UserMethods &
   RefreshTokenBridgeMethods &
   OpenIDRefreshFlightMethods &
   RoleMethods &
+  DepartmentMethods &
   KeyMethods &
   FileMethods &
   MemoryMethods &
@@ -401,6 +405,11 @@ export function createMethods(
   };
   const roleMethods = createRoleMethods(mongoose, roleDeps);
   const userGroupMethods = createUserGroupMethods(mongoose, userGroupDeps);
+  const departmentDeps: DepartmentDeps = {
+    getAncestorRoleKeys: roleMethods.getAncestorRoleKeys,
+    grantCapability: systemGrantMethods.grantCapability,
+  };
+  const departmentMethods = createDepartmentMethods(mongoose, departmentDeps);
 
   const promptDeps: PromptDeps = {
     removeAllPermissions,
@@ -437,6 +446,7 @@ export function createMethods(
     ...createRefreshTokenBridgeMethods(mongoose),
     ...createOpenIDRefreshFlightMethods(mongoose),
     ...roleMethods,
+    ...departmentMethods,
     ...createKeyMethods(mongoose),
     ...createFileMethods(mongoose),
     ...createMemoryMethods(mongoose),
@@ -494,6 +504,7 @@ export type {
   RefreshTokenBridgeMethods,
   OpenIDRefreshFlightMethods,
   RoleMethods,
+  DepartmentMethods,
   KeyMethods,
   FileMethods,
   FileOwnerScope,

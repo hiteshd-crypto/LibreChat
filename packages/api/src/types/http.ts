@@ -35,4 +35,8 @@ export type ServerRequest = Request<unknown, unknown, RequestBody> & {
   /** Set by `attachHierarchyScope` for a non-ADMIN, non-READ_USERS caller: the role
    *  keys they may see. `null` means unscoped (ADMIN or a generic READ_USERS grant). */
   hierarchyScope?: { viewableRoleKeys: string[] } | null;
+  /** Set by `attachDepartmentScope` for a DEPARTMENT_HEAD-only caller: the role
+   *  keys of their own branch (root inclusive) plus its descendants. `null`
+   *  means unscoped (ACCESS_ADMIN/MANAGE_ROLES/READ_ROLES). */
+  departmentScope?: { roleKeys: string[] } | null;
 };

@@ -12,6 +12,7 @@ const adminBalance = require('./admin/balance');
 const adminGroups = require('./admin/groups');
 const adminHierarchy = require('./admin/hierarchy');
 const adminRoles = require('./admin/roles');
+const adminDepartments = require('./admin/departments');
 const adminSkills = require('./admin/skills');
 const adminUsers = require('./admin/users');
 const adminAuditLog = require('./admin/audit');
@@ -59,6 +60,7 @@ module.exports = {
   adminGroups,
   adminHierarchy,
   adminRoles,
+  adminDepartments,
   adminSkills,
   adminUsers,
   adminAuditLog,

@@ -1353,6 +1353,8 @@ export function createAdminRole(body: {
   description?: string;
   /** Parent role's `roleKey`, or `null`/omitted for a top-level role. */
   parentRole?: string | null;
+  /** Only valid for a top-level create — claims an empty department's root role. */
+  departmentId?: string;
 }): Promise<{ role: adm.TAdminRole }> {
   return request.post(endpoints.adminRoles(), body);
 }
@@ -1466,6 +1468,40 @@ export function getMyHierarchy(): Promise<adm.TMyHierarchy> {
 /** Reassigns a user's role (hierarchy-scoped server-side). */
 export function setAdminUserRole(userId: string, role: string): Promise<{ success: true }> {
   return request.patch(endpoints.adminUserRole(userId), { role });
+}
+
+/* Admin — Departments (backed by /api/admin/departments*) */
+export function listAdminDepartments(): Promise<adm.TDepartmentListResponse> {
+  return request.get(endpoints.adminDepartments());
+}
+
+export function createAdminDepartment(
+  body: adm.TCreateDepartmentBody,
+): Promise<{ department: adm.TDepartment }> {
+  return request.post(endpoints.adminDepartments(), body);
+}
+
+export function getMyDepartment(): Promise<{ department: adm.TDepartment }> {
+  return request.get(endpoints.adminMyDepartment());
+}
+
+/** Wraps an existing top-level role as an already-created, still-empty department's head. */
+export function setAdminDepartmentHead(
+  departmentId: string,
+  body: adm.TSetDepartmentHeadBody,
+): Promise<{ department: adm.TDepartment }> {
+  return request.patch(endpoints.adminDepartmentHead(departmentId), body);
+}
+
+export function renameAdminDepartment(
+  departmentId: string,
+  body: adm.TRenameDepartmentBody,
+): Promise<{ department: adm.TDepartment }> {
+  return request.patch(endpoints.adminDepartment(departmentId), body);
+}
+
+export function deleteAdminDepartment(departmentId: string): Promise<{ success: true }> {
+  return request.delete(endpoints.adminDepartment(departmentId));
 }
 
 export function updatePromptPermissions(

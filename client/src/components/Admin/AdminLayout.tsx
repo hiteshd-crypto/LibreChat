@@ -11,6 +11,7 @@ export default function AdminLayout() {
   if (redirect) {
     return redirect;
   }
+  const isDeptHead = Boolean(hierarchy?.departmentHead) && !hierarchy?.isAdmin;
 
   const item = (to: string, label: string) => (
     <NavLink
@@ -40,7 +41,9 @@ export default function AdminLayout() {
           aria-label={localize('com_admin_nav_title')}
           className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible"
         >
-          {hierarchy?.isAdmin ? item('/admin/access', localize('com_admin_hierarchy_title')) : null}
+          {hierarchy?.isAdmin || isDeptHead
+            ? item('/admin/access', localize('com_admin_hierarchy_title'))
+            : null}
           {hierarchy?.isAdmin ? item('/admin/pricing', localize('com_admin_pricing_title')) : null}
           {hierarchy?.isAdmin ? item('/admin/balance', localize('com_admin_balance_title')) : null}
           {item('/admin/users', localize('com_admin_users_title'))}

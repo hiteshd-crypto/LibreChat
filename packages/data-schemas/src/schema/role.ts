@@ -109,6 +109,13 @@ const roleSchema: Schema<IRole> = new Schema({
     type: Number,
     default: 0,
   },
+  /** True once an admin deletes the Department that wrapped this top-level role;
+   * `migrateDepartments` must not re-wrap it. Cleared when the role is
+   * deliberately re-wrapped via `createDepartment`/`setDepartmentRootRole`. */
+  departmentExcluded: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 roleSchema.pre('validate', function (next) {

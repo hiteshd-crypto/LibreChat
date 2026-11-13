@@ -1,5 +1,6 @@
 import { SystemRoles } from 'librechat-data-provider';
 import { logger, SystemCapabilities } from '@librechat/data-schemas';
+import type { IDepartment } from '@librechat/data-schemas';
 import type { Response } from 'express';
 import type { HasCapabilityFn, CapabilityUser } from '~/middleware/capabilities';
 import type { ServerRequest } from '~/types/http';
@@ -7,6 +8,9 @@ import type { ServerRequest } from '~/types/http';
 export interface AdminHierarchyDeps {
   hasCapability: HasCapabilityFn;
   getDescendantRoleKeys: (roleKey: string) => Promise<string[]>;
+  /** Resolves which Department, if any, owns the caller's own role — populates
+   * `TMyHierarchy.departmentHead` for a DEPARTMENT_HEAD holder. */
+  getDepartmentForRoleKey: (roleKey: string, tenantId?: string) => Promise<IDepartment | null>;
 }
 
 /**
@@ -17,7 +21,7 @@ export interface AdminHierarchyDeps {
 export function createAdminHierarchyHandlers(deps: AdminHierarchyDeps): {
   getMyHierarchy: (req: ServerRequest, res: Response) => Promise<Response>;
 } {
-  const { hasCapability, getDescendantRoleKeys } = deps;
+  const { hasCapability, getDescendantRoleKeys, getDepartmentForRoleKey } = deps;
 
   async function getMyHierarchy(req: ServerRequest, res: Response) {
     try {
@@ -51,11 +55,33 @@ export function createAdminHierarchyHandlers(deps: AdminHierarchyDeps): {
       );
       const roleKeys = canViewSubordinates ? await getDescendantRoleKeys(role) : [];
 
+      const isDepartmentHead = await hasCapability(
+        capabilityUser,
+        SystemCapabilities.DEPARTMENT_HEAD,
+      );
+      const department = isDepartmentHead
+        ? await getDepartmentForRoleKey(role, capabilityUser.tenantId)
+        : null;
+      // DEPARTMENT_HEAD is only ever granted to a department's rootRoleKey, so a
+      // department resolved for this holder's own role always has one — the
+      // null check is defensive type-narrowing, not an expected runtime path.
+      const departmentHead:
+        | { departmentId: string; departmentName: string; rootRoleKey: string }
+        | undefined =
+        department && department.rootRoleKey != null
+          ? {
+              departmentId: String((department as unknown as { _id: unknown })._id),
+              departmentName: department.name,
+              rootRoleKey: department.rootRoleKey,
+            }
+          : undefined;
+
       return res.status(200).json({
         isAdmin: false,
         canViewSubordinates,
         viewableRoleKeys: roleKeys,
         manageableRoleKeys: roleKeys,
+        departmentHead,
       });
     } catch (error) {
       logger.error('[adminHierarchy] getMyHierarchy error:', error);

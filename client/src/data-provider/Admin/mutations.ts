@@ -3,6 +3,10 @@ import { QueryKeys, dataService } from 'librechat-data-provider';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   TAdminRole,
+  TDepartment,
+  TCreateDepartmentBody,
+  TRenameDepartmentBody,
+  TSetDepartmentHeadBody,
   TAdminUserBalance,
   TAdminUserBalanceConflict,
   TAdminUserBalanceUpdateBody,
@@ -16,11 +20,22 @@ import type { UseMutationResult } from '@tanstack/react-query';
 export const useCreateRole = (): UseMutationResult<
   { role: TAdminRole },
   Error,
-  { name: string; description?: string; parentRole?: string | null }
+  {
+    name: string;
+    description?: string;
+    parentRole?: string | null;
+    /** Only valid for a top-level create — claims an empty department's root role. */
+    departmentId?: string;
+  }
 > => {
   const queryClient = useQueryClient();
   return useMutation((body) => dataService.createAdminRole(body), {
-    onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminRoles]),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries([QueryKeys.adminRoles]);
+      if (variables.departmentId) {
+        queryClient.invalidateQueries([QueryKeys.adminDepartments]);
+      }
+    },
   });
 };
 
@@ -75,6 +90,58 @@ export const useDeleteRole = (): UseMutationResult<
   const queryClient = useQueryClient();
   return useMutation(({ roleKey }) => dataService.deleteAdminRole(roleKey), {
     onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminRoles]),
+  });
+};
+
+export const useCreateDepartment = (): UseMutationResult<
+  { department: TDepartment },
+  Error,
+  TCreateDepartmentBody
+> => {
+  const queryClient = useQueryClient();
+  return useMutation((body) => dataService.createAdminDepartment(body), {
+    onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminDepartments]),
+  });
+};
+
+export const useRenameDepartment = (): UseMutationResult<
+  { department: TDepartment },
+  Error,
+  { departmentId: string; body: TRenameDepartmentBody }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(
+    ({ departmentId, body }) => dataService.renameAdminDepartment(departmentId, body),
+    {
+      onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminDepartments]),
+    },
+  );
+};
+
+export const useSetDepartmentHead = (): UseMutationResult<
+  { department: TDepartment },
+  Error,
+  { departmentId: string; body: TSetDepartmentHeadBody }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(
+    ({ departmentId, body }) => dataService.setAdminDepartmentHead(departmentId, body),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries([QueryKeys.adminDepartments]);
+      },
+    },
+  );
+};
+
+export const useDeleteDepartment = (): UseMutationResult<
+  { success: true },
+  Error,
+  { departmentId: string }
+> => {
+  const queryClient = useQueryClient();
+  return useMutation(({ departmentId }) => dataService.deleteAdminDepartment(departmentId), {
+    onSuccess: () => queryClient.invalidateQueries([QueryKeys.adminDepartments]),
   });
 };
 

@@ -18,6 +18,44 @@ export interface TMyHierarchy {
   canViewSubordinates: boolean;
   viewableRoleKeys: string[];
   manageableRoleKeys: string[];
+  /** Present when the caller holds `DEPARTMENT_HEAD` for their own branch. */
+  departmentHead?: {
+    departmentId: string;
+    departmentName: string;
+    rootRoleKey: string;
+  };
+}
+
+/** A Department is a thin label over one top-level custom-role branch. */
+export interface TDepartment {
+  _id: string;
+  name: string;
+  /** `null` until a top-level role is created for this department — a
+   * department starts completely empty. */
+  rootRoleKey: string | null;
+  createdAt?: string;
+  /** Users holding the branch-root role or any role beneath it, as returned by the list endpoint. */
+  memberCount?: number;
+}
+
+export interface TDepartmentListResponse {
+  departments: TDepartment[];
+}
+
+export interface TCreateDepartmentBody {
+  name: string;
+  /** Omitted to create an empty department; set to wrap an existing top-level role. */
+  rootRoleKey?: string;
+}
+
+export interface TRenameDepartmentBody {
+  name: string;
+}
+
+/** `PATCH /api/admin/departments/:id/head` — wraps an existing top-level role
+ * as an already-created, still-empty department's head. */
+export interface TSetDepartmentHeadBody {
+  roleKey: string;
 }
 
 export interface TAdminRoleListResponse {

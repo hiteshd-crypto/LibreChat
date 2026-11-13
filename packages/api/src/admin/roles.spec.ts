@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { SystemCapabilities } from '@librechat/data-schemas';
 import { PrincipalType, SystemRoles } from 'librechat-data-provider';
 import type { IRole, IUser } from '@librechat/data-schemas';
 import type { Response } from 'express';
@@ -80,8 +81,15 @@ function createDeps(overrides: Partial<AdminRolesDeps> = {}): AdminRolesDeps {
     deleteConfig: jest.fn().mockResolvedValue(null),
     deleteAclEntries: jest.fn().mockResolvedValue(undefined),
     deleteGrantsForPrincipal: jest.fn().mockResolvedValue([]),
+    getDepartmentById: jest.fn().mockResolvedValue(null),
+    setDepartmentRootRole: jest.fn().mockResolvedValue(null),
+    clearDepartmentRootRole: jest.fn().mockResolvedValue(null),
     ...overrides,
   };
+}
+
+function mockDepartment(overrides: Record<string, unknown> = {}) {
+  return { _id: 'dept-1', name: 'Finance', rootRoleKey: null, ...overrides };
 }
 
 describe('createAdminRolesHandlers', () => {
@@ -254,6 +262,97 @@ describe('createAdminRolesHandlers', () => {
       expect(deps.createRoleByName).toHaveBeenCalledWith({
         name: 'editor',
         permissions: perms,
+      });
+    });
+
+    describe('departmentId linking', () => {
+      it("links a new top-level role as an empty department's root and grants DEPARTMENT_HEAD", async () => {
+        const role = mockRole({ name: 'Finance Head', roleKey: 'FIN_HEAD' });
+        const deps = createDeps({
+          createRoleByName: jest.fn().mockResolvedValue(role),
+          getDepartmentById: jest.fn().mockResolvedValue(mockDepartment()),
+          setDepartmentRootRole: jest
+            .fn()
+            .mockResolvedValue(mockDepartment({ rootRoleKey: 'FIN_HEAD' })),
+        });
+        const handlers = createAdminRolesHandlers(deps);
+        const { req, res, status, json } = createReqRes({
+          body: { name: 'Finance Head', departmentId: 'dept-1' },
+        });
+
+        await handlers.createRole(req, res);
+
+        expect(deps.getDepartmentById).toHaveBeenCalledWith('dept-1', undefined);
+        expect(deps.setDepartmentRootRole).toHaveBeenCalledWith('dept-1', 'FIN_HEAD', undefined);
+        expect(deps.grantCapability).toHaveBeenCalledWith(
+          expect.objectContaining({ principalId: 'FIN_HEAD', capability: 'manage:department' }),
+        );
+        expect(status).toHaveBeenCalledWith(201);
+        expect(json).toHaveBeenCalledWith({ role });
+      });
+
+      it('rejects departmentId paired with a non-null parentRole with 400', async () => {
+        const deps = createDeps();
+        const handlers = createAdminRolesHandlers(deps);
+        const { req, res, status } = createReqRes({
+          body: { name: 'child', departmentId: 'dept-1', parentRole: 'SOME_PARENT' },
+        });
+
+        await handlers.createRole(req, res);
+
+        expect(status).toHaveBeenCalledWith(400);
+        expect(deps.createRoleByName).not.toHaveBeenCalled();
+      });
+
+      it('404s for an unknown departmentId without creating a role', async () => {
+        const deps = createDeps({ getDepartmentById: jest.fn().mockResolvedValue(null) });
+        const handlers = createAdminRolesHandlers(deps);
+        const { req, res, status } = createReqRes({
+          body: { name: 'Finance Head', departmentId: 'ghost' },
+        });
+
+        await handlers.createRole(req, res);
+
+        expect(status).toHaveBeenCalledWith(404);
+        expect(deps.createRoleByName).not.toHaveBeenCalled();
+      });
+
+      it('409s when the department already has a root role, without creating a role', async () => {
+        const deps = createDeps({
+          getDepartmentById: jest
+            .fn()
+            .mockResolvedValue(mockDepartment({ rootRoleKey: 'EXISTING' })),
+        });
+        const handlers = createAdminRolesHandlers(deps);
+        const { req, res, status } = createReqRes({
+          body: { name: 'Finance Head', departmentId: 'dept-1' },
+        });
+
+        await handlers.createRole(req, res);
+
+        expect(status).toHaveBeenCalledWith(409);
+        expect(deps.createRoleByName).not.toHaveBeenCalled();
+      });
+
+      it('rolls back the created role and 409s when it loses the claim race', async () => {
+        const role = mockRole({ name: 'Finance Head', roleKey: 'FIN_HEAD' });
+        const deps = createDeps({
+          createRoleByName: jest.fn().mockResolvedValue(role),
+          getDepartmentById: jest.fn().mockResolvedValue(mockDepartment()),
+          setDepartmentRootRole: jest.fn().mockResolvedValue(null),
+        });
+        const handlers = createAdminRolesHandlers(deps);
+        const { req, res, status } = createReqRes({
+          body: { name: 'Finance Head', departmentId: 'dept-1' },
+        });
+
+        await handlers.createRole(req, res);
+
+        expect(deps.deleteRoleByName).toHaveBeenCalledWith('FIN_HEAD');
+        expect(status).toHaveBeenCalledWith(409);
+        expect(deps.grantCapability).not.toHaveBeenCalledWith(
+          expect.objectContaining({ capability: 'manage:department' }),
+        );
       });
     });
 
@@ -564,7 +663,7 @@ describe('createAdminRolesHandlers', () => {
       expect(json).toHaveBeenCalledWith({ error: 'Cannot use a reserved system role name' });
     });
 
-    it('returns 409 when updateRoleByName reports a sibling name conflict', async () => {
+    it('returns 409 when updateRoleByName reports a RoleConflictError', async () => {
       const deps = createDeps({
         updateRoleByName: jest
           .fn()
@@ -897,6 +996,62 @@ describe('createAdminRolesHandlers', () => {
       expect(deps.deleteGrantsForPrincipal).toHaveBeenCalledWith(PrincipalType.ROLE, 'editor', {
         tenantId: undefined,
       });
+    });
+
+    it('clears the department link when the deleted role was its head', async () => {
+      const recordAuditEntry = jest.fn().mockResolvedValue(undefined);
+      const clearDepartmentRootRole = jest
+        .fn()
+        .mockResolvedValue(mockDepartment({ rootRoleKey: null }));
+      const deps = createDeps({ clearDepartmentRootRole, recordAuditEntry });
+      const handlers = createAdminRolesHandlers(deps);
+      const userId = new Types.ObjectId();
+      const { req, res, status } = createReqRes({
+        params: { roleKey: 'editor' },
+        user: { _id: userId, role: 'admin', tenantId: 'tenant-1' },
+      });
+
+      await handlers.deleteRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(200);
+      expect(clearDepartmentRootRole).toHaveBeenCalledWith('editor', 'tenant-1');
+      expect(recordAuditEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'grant.removed',
+          target: { type: PrincipalType.ROLE, id: 'editor', name: 'Finance' },
+          metadata: { capability: SystemCapabilities.DEPARTMENT_HEAD },
+        }),
+      );
+    });
+
+    it('does not emit a department-unlink audit when the role was not a department head', async () => {
+      const recordAuditEntry = jest.fn().mockResolvedValue(undefined);
+      const deps = createDeps({
+        clearDepartmentRootRole: jest.fn().mockResolvedValue(null),
+        recordAuditEntry,
+      });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status } = createReqRes({ params: { roleKey: 'editor' } });
+
+      await handlers.deleteRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(200);
+      expect(recordAuditEntry).not.toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: { capability: SystemCapabilities.DEPARTMENT_HEAD } }),
+      );
+    });
+
+    it('succeeds even when clearing the department link fails', async () => {
+      const deps = createDeps({
+        clearDepartmentRootRole: jest.fn().mockRejectedValue(new Error('db unavailable')),
+      });
+      const handlers = createAdminRolesHandlers(deps);
+      const { req, res, status, json } = createReqRes({ params: { roleKey: 'editor' } });
+
+      await handlers.deleteRole(req, res);
+
+      expect(status).toHaveBeenCalledWith(200);
+      expect(json).toHaveBeenCalledWith({ success: true });
     });
 
     it('passes tenantId to grant cleanup', async () => {

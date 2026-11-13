@@ -54,6 +54,14 @@ export const SystemCapabilities = {
    * would defeat the forensic guarantee.
    */
   READ_AUDIT_LOG: 'read:audit_log',
+  /**
+   * Scoped, admin-like capability auto-granted to a department's branch-root role.
+   * Unlocks department-scoped Hierarchy Management (view/create/edit/reparent/delete
+   * within the holder's own branch only) and the existing Balance Distribution flow
+   * scoped to the holder as root. Never unlocks Pricing, the User Balance editor,
+   * cross-department Users, or any other department's data.
+   */
+  DEPARTMENT_HEAD: 'manage:department',
 } as const;
 
 /** Base capabilities derived from the SystemCapabilities constant. */
@@ -271,6 +279,11 @@ export const CAPABILITY_CATEGORIES: CapabilityCategory[] = [
       SystemCapabilities.MANAGE_SHARED_LINKS,
       SystemCapabilities.READ_SHARED_LINKS,
     ],
+  },
+  {
+    key: 'departments',
+    labelKey: 'com_cap_cat_departments',
+    capabilities: [SystemCapabilities.DEPARTMENT_HEAD],
   },
   {
     key: 'system',

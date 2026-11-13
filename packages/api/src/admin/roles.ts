@@ -10,6 +10,7 @@ import type {
   IUser,
   IConfig,
   AdminMember,
+  IDepartment,
   ISystemGrant,
   SystemCapability,
   RecordAuditEntryInput,
@@ -112,7 +113,8 @@ export interface AdminRolesDeps {
   setRoleParent: (roleName: string, newParentName: string | null) => Promise<IRole>;
   /** Direct-children count — a nonzero count blocks deletion. */
   countChildRoles: (roleName: string) => Promise<number>;
-  /** Auto-grants VIEW_SUBORDINATES to a newly created custom role. */
+  /** Auto-grants VIEW_SUBORDINATES to a newly created custom role, and
+   * DEPARTMENT_HEAD to one created via the `departmentId` linking path. */
   grantCapability: (params: {
     principalType: PrincipalType;
     principalId: string | Types.ObjectId;
@@ -120,6 +122,18 @@ export interface AdminRolesDeps {
     tenantId?: string;
     grantedBy?: string | Types.ObjectId;
   }) => Promise<{ grant: ISystemGrant | null; created: boolean }>;
+  /** Used only by the `departmentId` top-level-create linking path. */
+  getDepartmentById: (departmentId: string, tenantId?: string) => Promise<IDepartment | null>;
+  /** Atomically claims an empty department's root role; `null` means the
+   * department doesn't exist or already has one (lost a race). */
+  setDepartmentRootRole: (
+    departmentId: string,
+    rootRoleKey: string,
+    tenantId?: string,
+  ) => Promise<IDepartment | null>;
+  /** Reverts a department to empty when the role being deleted is its current
+   * root; `null` means no department currently points at this roleKey. */
+  clearDepartmentRootRole: (rootRoleKey: string, tenantId?: string) => Promise<IDepartment | null>;
   findUser: (
     criteria: FilterQuery<IUser>,
     fields?: string | string[] | null,
@@ -188,6 +202,9 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
     deleteGrantsForPrincipal,
     recordAuditEntry,
     invalidatePromptGroupAccessContext,
+    getDepartmentById,
+    setDepartmentRootRole,
+    clearDepartmentRootRole,
   } = deps;
 
   /** Emits a `grant.removed` audit entry for each grant the role-deletion cascade
@@ -227,9 +244,25 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
     }
   }
 
+  /**
+   * Fetch ceiling used only when `req.departmentScope` is set — a Department
+   * Head's own branch is always small, so filtering a single larger-than-page
+   * fetch is simpler and safer than teaching `listRoles` a new scoping option
+   * (data-schemas stays a dumb data layer, per the scoping design).
+   */
+  const DEPARTMENT_SCOPE_FETCH_LIMIT = 1000;
+
   async function listRolesHandler(req: ServerRequest, res: Response) {
     try {
       const { limit, offset } = parsePagination(req.query);
+      const scope = req.departmentScope;
+      if (scope) {
+        const scopeKeys = new Set(scope.roleKeys);
+        const all = await listRoles({ limit: DEPARTMENT_SCOPE_FETCH_LIMIT, offset: 0 });
+        const filtered = all.filter((role) => scopeKeys.has(role.roleKey));
+        const page = filtered.slice(offset, offset + limit);
+        return res.status(200).json({ roles: page, total: filtered.length, limit, offset });
+      }
       const [roles, total] = await Promise.all([listRoles({ limit, offset }), countRoles()]);
       return res.status(200).json({ roles, total, limit, offset });
     } catch (error) {
@@ -249,6 +282,10 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       if (!role) {
         return res.status(404).json({ error: 'Role not found' });
       }
+      const scope = req.departmentScope;
+      if (scope && !scope.roleKeys.includes(roleKey)) {
+        return res.status(404).json({ error: 'Role not found' });
+      }
       return res.status(200).json({ role });
     } catch (error) {
       logger.error('[adminRoles] getRole error:', error);
@@ -256,13 +293,79 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
     }
   }
 
+  /** Emits a `grant.assigned` audit entry when a top-level role creation links
+   * and becomes an empty department's root — the same action/shape
+   * `admin/departments.ts` emits for the wrap-existing-role path, for parity. */
+  async function emitDepartmentLinkAudit(
+    req: ServerRequest,
+    department: IDepartment,
+    roleKey: string,
+  ): Promise<void> {
+    if (!recordAuditEntry) return;
+    const user = req.user;
+    const userId = user?._id?.toString() ?? user?.id;
+    if (!user || !userId) return;
+    const actorName = user.name || user.username || user.email || userId;
+    try {
+      await recordAuditEntry({
+        action: 'grant.assigned',
+        outcome: 'success',
+        actor: { type: 'user', id: userId, name: actorName },
+        target: { type: PrincipalType.ROLE, id: roleKey, name: department.name },
+        metadata: { capability: SystemCapabilities.DEPARTMENT_HEAD },
+        context: buildAuditContext(req),
+        tenantId: user.tenantId,
+      });
+    } catch (err) {
+      logger.error('[adminRoles] grant.assigned audit failed for department link', err);
+    }
+  }
+
+  /** Emits a `grant.removed` audit entry when deleting a role un-links it as a
+   * department's root — the counterpart to `emitDepartmentLinkAudit`. */
+  async function emitDepartmentUnlinkAudit(
+    req: ServerRequest,
+    department: IDepartment,
+    roleKey: string,
+  ): Promise<void> {
+    if (!recordAuditEntry) return;
+    const user = req.user;
+    const userId = user?._id?.toString() ?? user?.id;
+    if (!user || !userId) return;
+    const actorName = user.name || user.username || user.email || userId;
+    try {
+      await recordAuditEntry({
+        action: 'grant.removed',
+        outcome: 'success',
+        actor: { type: 'user', id: userId, name: actorName },
+        target: { type: PrincipalType.ROLE, id: roleKey, name: department.name },
+        metadata: { capability: SystemCapabilities.DEPARTMENT_HEAD },
+        context: buildAuditContext(req),
+        tenantId: user.tenantId,
+      });
+    } catch (err) {
+      logger.error('[adminRoles] grant.removed audit failed for department unlink', err);
+    }
+  }
+
+  /**
+   * Creates a role. `departmentId` is only honored for a top-level create
+   * (`parentRole` absent/`null`) and is the sole way an empty department (see
+   * `admin/departments.ts`) gets its first role: the department must exist and
+   * not already have a root role, checked before the role is minted so a
+   * doomed request never creates an orphan. On success the new role becomes
+   * the department's `rootRoleKey` and is granted `DEPARTMENT_HEAD`, atomically
+   * guarded against a concurrent claim of the same empty department — if that
+   * race is lost, the just-created role is deleted and a 409 is returned.
+   */
   async function createRoleHandler(req: ServerRequest, res: Response) {
     try {
-      const { name, description, permissions, parentRole } = req.body as {
+      const { name, description, permissions, parentRole, departmentId } = req.body as {
         name?: string;
         description?: string;
         permissions?: IRole['permissions'];
         parentRole?: string | null;
+        departmentId?: string;
       };
       const nameError = validateRoleName(name, true);
       if (nameError) {
@@ -290,6 +393,27 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
           return res.status(400).json({ error: 'parentRole cannot be a system role' });
         }
       }
+      if (departmentId != null) {
+        if (typeof departmentId !== 'string') {
+          return res.status(400).json({ error: 'departmentId must be a string' });
+        }
+        if (parentRole != null) {
+          return res
+            .status(400)
+            .json({ error: 'departmentId is only valid when creating a top-level role' });
+        }
+      }
+      let department: IDepartment | null = null;
+      if (departmentId != null) {
+        department = await getDepartmentById(departmentId, req.user?.tenantId);
+        if (!department) {
+          return res.status(404).json({ error: `Department "${departmentId}" not found` });
+        }
+        if (department.rootRoleKey != null) {
+          return res.status(409).json({ error: 'Department already has a root role' });
+        }
+      }
+
       const roleData: Partial<IRole> = {
         name: (name as string).trim(),
         permissions: permissions ?? {},
@@ -307,6 +431,33 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
         capability: SystemCapabilities.VIEW_SUBORDINATES,
         tenantId: req.user?.tenantId,
       });
+
+      if (department != null) {
+        const linked = await setDepartmentRootRole(
+          department._id.toString(),
+          role.roleKey,
+          req.user?.tenantId,
+        );
+        if (!linked) {
+          try {
+            await deleteRoleByName(role.roleKey);
+          } catch (err) {
+            logger.error(
+              '[adminRoles] failed to roll back orphan role after losing department-link race',
+              err,
+            );
+          }
+          return res.status(409).json({ error: 'Department already has a root role' });
+        }
+        await grantCapability({
+          principalType: PrincipalType.ROLE,
+          principalId: role.roleKey,
+          capability: SystemCapabilities.DEPARTMENT_HEAD,
+          tenantId: req.user?.tenantId,
+        });
+        await emitDepartmentLinkAudit(req, linked, role.roleKey);
+      }
+
       return res.status(201).json({ role });
     } catch (error) {
       logger.error('[adminRoles] createRole error:', error);
@@ -473,12 +624,13 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       }
 
       const tenantId = req.user?.tenantId;
-      const [configResult, aclResult, grantsResult] = await Promise.allSettled([
+      const [configResult, aclResult, grantsResult, unlinkResult] = await Promise.allSettled([
         deleteConfig(PrincipalType.ROLE, roleKey),
         deleteAclEntries({ principalType: PrincipalType.ROLE, principalId: roleKey }),
         deleteGrantsForPrincipal(PrincipalType.ROLE, roleKey, { tenantId }),
+        clearDepartmentRootRole(roleKey, tenantId),
       ]);
-      for (const result of [configResult, aclResult, grantsResult]) {
+      for (const result of [configResult, aclResult, grantsResult, unlinkResult]) {
         if (result.status === 'rejected') {
           logger.error('[adminRoles] cascade cleanup failed for role:', roleKey, result.reason);
         }
@@ -489,6 +641,11 @@ export function createAdminRolesHandlers(deps: AdminRolesDeps): {
       }
       if (grantsResult.status === 'fulfilled') {
         await emitGrantRemovals(req, roleKey, existing.name, grantsResult.value);
+      }
+      if (unlinkResult.status === 'fulfilled' && unlinkResult.value) {
+        /** This role was a department's root — the department reverts to empty
+         * rather than being left pointing at a deleted role. */
+        await emitDepartmentUnlinkAudit(req, unlinkResult.value, roleKey);
       }
 
       return res.status(200).json({ success: true });

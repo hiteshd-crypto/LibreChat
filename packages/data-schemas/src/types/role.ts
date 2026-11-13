@@ -89,6 +89,8 @@ export interface IRole extends Document {
   parentRole?: string | null;
   /** Denormalized tree depth (0 for USER, ADMIN, and top-level branches). Display/pre-check only — never used for authorization. */
   depth?: number;
+  /** True once an admin deletes the Department that wrapped this top-level role; `migrateDepartments` must not re-wrap it. */
+  departmentExcluded?: boolean;
 }
 
 export type RolePermissions = IRole['permissions'];

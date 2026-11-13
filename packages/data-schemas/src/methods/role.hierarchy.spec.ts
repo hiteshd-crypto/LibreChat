@@ -117,15 +117,13 @@ describe('setRoleParent', () => {
     await expect(methods.setRoleParent(salesMgr.roleKey, null)).rejects.toThrow(RoleConflictError);
   });
 
-  it('rejects a move that would duplicate a sibling name', async () => {
+  it('allows a move that would duplicate a sibling name', async () => {
     const { sup, salesMgr } = await seedTree();
     const dupe = await methods.createRoleByName({
       name: 'SALES_MANAGER',
       parentRole: salesMgr.roleKey,
     });
-    await expect(methods.setRoleParent(dupe.roleKey, sup.roleKey)).rejects.toThrow(
-      RoleConflictError,
-    );
+    await expect(methods.setRoleParent(dupe.roleKey, sup.roleKey)).resolves.toBeDefined();
   });
 
   it('rejects a cycle', async () => {

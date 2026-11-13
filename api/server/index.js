@@ -382,6 +382,7 @@ const startServer = async () => {
   app.use('/api/admin/groups', routes.adminGroups);
   app.use('/api/admin/hierarchy', routes.adminHierarchy);
   app.use('/api/admin/roles', routes.adminRoles);
+  app.use('/api/admin/departments', routes.adminDepartments);
   app.use('/api/admin/skills', routes.adminSkills);
   app.use('/api/admin/users', routes.adminUsers);
   app.use('/api/admin/audit-log', routes.adminAuditLog);

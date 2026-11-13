@@ -9,16 +9,30 @@ export default function CreateRoleDialog({
   open,
   onOpenChange,
   parent,
+  departmentId,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   /** When set, the dialog adds a child of this role; otherwise it creates a top-level role. */
   parent?: TAdminRole | null;
+  /** Only meaningful for a top-level create (no `parent`): claims an empty
+   * department's root role and grants it DEPARTMENT_HEAD. */
+  departmentId?: string;
 }) {
   const localize = useLocalize();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const mutation = useCreateRole();
+
+  const title = (() => {
+    if (parent) {
+      return localize('com_admin_role_add_under', { 0: parent.name });
+    }
+    if (departmentId) {
+      return localize('com_admin_department_add_head_title');
+    }
+    return localize('com_admin_access_create_title');
+  })();
 
   const reset = () => {
     setName('');
@@ -35,6 +49,7 @@ export default function CreateRoleDialog({
         name: name.trim(),
         description: description.trim() || undefined,
         parentRole: parent?.roleKey ?? null,
+        departmentId: parent ? undefined : departmentId,
       },
       {
         onSuccess: () => {
@@ -56,23 +71,29 @@ export default function CreateRoleDialog({
       }}
     >
       <OGDialogTemplate
-        title={
-          parent
-            ? localize('com_admin_role_add_under', { 0: parent.name })
-            : localize('com_admin_access_create_title')
-        }
+        title={title}
         showCloseButton={false}
         className="w-11/12 md:max-w-md"
         main={
           <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-sm text-text-secondary">
               {localize('com_admin_access_role_name')}
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={localize('com_admin_access_role_name_placeholder')}
+              />
             </label>
+            <p className="-mt-2 text-xs text-text-secondary">
+              {localize('com_admin_access_role_name_hint')}
+            </p>
             <label className="flex flex-col gap-1 text-sm text-text-secondary">
               {localize('com_admin_access_role_description')}
               <Input value={description} onChange={(e) => setDescription(e.target.value)} />
             </label>
+            <p className="text-xs text-text-secondary">
+              {localize('com_admin_access_role_members_hint')}
+            </p>
             {parent ? (
               <p className="text-sm text-text-secondary">
                 {localize('com_admin_role_parent_label')}:{' '}

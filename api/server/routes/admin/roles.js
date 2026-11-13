@@ -1,15 +1,37 @@
 const express = require('express');
-const { createAdminRolesHandlers } = require('@librechat/api');
+const { createAdminRolesHandlers, createHierarchyMiddleware } = require('@librechat/api');
 const { SystemCapabilities } = require('@librechat/data-schemas');
-const { requireCapability } = require('~/server/middleware/roles/capabilities');
+const { hasCapability, requireAnyCapability } = require('~/server/middleware/roles/capabilities');
 const { requireJwtAuth } = require('~/server/middleware');
 const db = require('~/models');
 
 const router = express.Router();
 
-const requireAdminAccess = requireCapability(SystemCapabilities.ACCESS_ADMIN);
-const requireReadRoles = requireCapability(SystemCapabilities.READ_ROLES);
-const requireManageRoles = requireCapability(SystemCapabilities.MANAGE_ROLES);
+/**
+ * Widened from ACCESS_ADMIN-only so a DEPARTMENT_HEAD holder can reach this
+ * router at all; `attachDepartmentScope`/`requireDepartmentRoleAccess` below
+ * are what actually confine them to their own branch.
+ */
+const requireAdminOrDeptAccess = requireAnyCapability([
+  SystemCapabilities.ACCESS_ADMIN,
+  SystemCapabilities.DEPARTMENT_HEAD,
+]);
+const requireReadRoles = requireAnyCapability([
+  SystemCapabilities.READ_ROLES,
+  SystemCapabilities.DEPARTMENT_HEAD,
+]);
+const requireManageRoles = requireAnyCapability([
+  SystemCapabilities.MANAGE_ROLES,
+  SystemCapabilities.DEPARTMENT_HEAD,
+]);
+
+const { attachDepartmentScope, requireDepartmentRoleAccess } = createHierarchyMiddleware({
+  hasCapability,
+  findUsers: db.findUsers,
+  canViewRole: db.canViewRole,
+  getDescendantRoleKeys: db.getDescendantRoleKeys,
+  isDescendantOf: db.isDescendantOf,
+});
 
 const handlers = createAdminRolesHandlers({
   listRoles: db.listRoles,
@@ -31,18 +53,41 @@ const handlers = createAdminRolesHandlers({
   deleteGrantsForPrincipal: db.deleteGrantsForPrincipal,
   recordAuditEntry: db.recordAuditEntry,
   invalidatePromptGroupAccessContext: db.invalidatePromptGroupAccessContext,
+  getDepartmentById: db.getDepartmentById,
+  setDepartmentRootRole: db.setDepartmentRootRole,
+  clearDepartmentRootRole: db.clearDepartmentRootRole,
 });
 
-router.use(requireJwtAuth, requireAdminAccess);
+router.use(requireJwtAuth, requireAdminOrDeptAccess);
 
-router.get('/', requireReadRoles, handlers.listRoles);
-router.post('/', requireManageRoles, handlers.createRole);
-router.get('/:roleKey', requireReadRoles, handlers.getRole);
-router.patch('/:roleKey', requireManageRoles, handlers.updateRole);
-router.delete('/:roleKey', requireManageRoles, handlers.deleteRole);
-router.patch('/:roleKey/permissions', requireManageRoles, handlers.updateRolePermissions);
-router.get('/:roleKey/members', requireReadRoles, handlers.getRoleMembers);
-router.post('/:roleKey/members', requireManageRoles, handlers.addRoleMember);
-router.delete('/:roleKey/members/:userId', requireManageRoles, handlers.removeRoleMember);
+router.get('/', requireReadRoles, attachDepartmentScope, handlers.listRoles);
+router.post('/', requireManageRoles, requireDepartmentRoleAccess, handlers.createRole);
+router.get('/:roleKey', requireReadRoles, attachDepartmentScope, handlers.getRole);
+router.patch('/:roleKey', requireManageRoles, requireDepartmentRoleAccess, handlers.updateRole);
+router.delete('/:roleKey', requireManageRoles, requireDepartmentRoleAccess, handlers.deleteRole);
+router.patch(
+  '/:roleKey/permissions',
+  requireManageRoles,
+  requireDepartmentRoleAccess,
+  handlers.updateRolePermissions,
+);
+router.get(
+  '/:roleKey/members',
+  requireReadRoles,
+  requireDepartmentRoleAccess,
+  handlers.getRoleMembers,
+);
+router.post(
+  '/:roleKey/members',
+  requireManageRoles,
+  requireDepartmentRoleAccess,
+  handlers.addRoleMember,
+);
+router.delete(
+  '/:roleKey/members/:userId',
+  requireManageRoles,
+  requireDepartmentRoleAccess,
+  handlers.removeRoleMember,
+);
 
 module.exports = router;

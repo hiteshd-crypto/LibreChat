@@ -4,12 +4,14 @@ import type {
   TConversation,
   TMessage,
   TMyHierarchy,
+  TDepartment,
   TAdminRoleListResponse,
   TAdminUserBalance,
   TAdminUserListItem,
   TAdminPricingListResponse,
   TAdminMemberListResponse,
   TAdminUserListResponse,
+  TDepartmentListResponse,
   TAdminUserSearchResponse,
   TAdminUserConversationsResponse,
 } from 'librechat-data-provider';
@@ -64,6 +66,33 @@ export const useMyHierarchy = (
     staleTime: 30_000,
     ...config,
   });
+
+export const useDepartments = (
+  config?: UseQueryOptions<TDepartmentListResponse>,
+): QueryObserverResult<TDepartmentListResponse> =>
+  useQuery<TDepartmentListResponse>(
+    [QueryKeys.adminDepartments],
+    () => dataService.listAdminDepartments(),
+    {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      ...config,
+    },
+  );
+
+/** The caller's own Department, when they hold `DEPARTMENT_HEAD`. */
+export const useMyDepartment = (
+  config?: UseQueryOptions<{ department: TDepartment }>,
+): QueryObserverResult<{ department: TDepartment }> =>
+  useQuery<{ department: TDepartment }>(
+    [QueryKeys.myDepartment],
+    () => dataService.getMyDepartment(),
+    {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      ...config,
+    },
+  );
 
 export const useAdminRoleMembers = (
   roleKey: string,

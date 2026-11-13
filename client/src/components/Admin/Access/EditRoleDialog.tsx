@@ -12,27 +12,31 @@ import {
   TabsContent,
 } from '@librechat/client';
 import type { TAdminRole } from 'librechat-data-provider';
+import DeleteConfirmDialog from '~/components/DeleteConfirmDialog/DeleteConfirmDialog';
 import { useUpdateRole, useDeleteRole } from '~/data-provider';
 import { getResponseErrorMessage } from '~/utils';
 import RoleMembersPanel from './RoleMembersPanel';
 import { SYSTEM_ROLES } from './constants';
 import { useLocalize } from '~/hooks';
-import DeleteConfirmDialog from '~/components/DeleteConfirmDialog/DeleteConfirmDialog';
 
 export default function EditRoleDialog({
   role,
   parentName,
+  initialTab = 'details',
   onClose,
 }: {
   role: TAdminRole | null;
   /** Display name of the role's parent, or `undefined` for a top-level role. */
   parentName?: string;
+  /** Which tab to land on when the dialog opens — 'members' for the "Add
+   * members" quick-access entry point, 'details' for the edit-pencil one. */
+  initialTab?: 'details' | 'members';
   onClose: () => void;
 }) {
   const localize = useLocalize();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [activeTab, setActiveTab] = useState(initialTab);
   const updateMutation = useUpdateRole();
   const deleteMutation = useDeleteRole();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -40,11 +44,11 @@ export default function EditRoleDialog({
   useEffect(() => {
     setName(role?.name ?? '');
     setDescription(role?.description ?? '');
-    setConfirmDelete(false);
+    setActiveTab(initialTab);
     updateMutation.reset();
     deleteMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role?.roleKey]);
+  }, [role?.roleKey, initialTab]);
 
   if (!role) {
     return null;
@@ -86,7 +90,10 @@ export default function EditRoleDialog({
         showCloseButton={false}
         className="w-11/12 md:max-w-lg"
         main={
-          <Tabs defaultValue="details">
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as 'details' | 'members')}
+          >
             <TabsList>
               <TabsTrigger value="details">{localize('com_admin_access_tab_details')}</TabsTrigger>
               {canManageMembers ? (

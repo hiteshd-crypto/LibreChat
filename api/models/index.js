@@ -12,6 +12,7 @@ const methods = createMethods(mongoose, {
 
 const seedDatabase = async () => {
   await methods.initializeRoles();
+  await methods.migrateDepartments();
   await methods.seedDefaultRoles();
   await methods.ensureDefaultCategories();
   await methods.seedSystemGrants();

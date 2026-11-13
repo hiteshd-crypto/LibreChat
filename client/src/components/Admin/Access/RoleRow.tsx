@@ -1,4 +1,5 @@
-import { GripVertical, Plus, Pencil } from 'lucide-react';
+import { SystemRoles } from 'librechat-data-provider';
+import { GripVertical, Plus, Pencil, Users } from 'lucide-react';
 import type { TAdminRole } from 'librechat-data-provider';
 import { useLocalize } from '~/hooks';
 
@@ -8,6 +9,7 @@ export default function RoleRow({
   isTopLevel,
   label,
   onEdit,
+  onManageMembers,
   onAdd,
   onKeyboardMove,
   dragHandleRef,
@@ -19,6 +21,7 @@ export default function RoleRow({
   isTopLevel: boolean;
   label: string;
   onEdit: () => void;
+  onManageMembers: () => void;
   onAdd: () => void;
   onKeyboardMove: () => void;
   dragHandleRef?: (el: HTMLButtonElement | null) => void;
@@ -27,6 +30,8 @@ export default function RoleRow({
   const localize = useLocalize();
   const showGrip = !isSystem && !isTopLevel;
   const showAdd = !isSystem;
+  /** USER is the implicit baseline — the backend rejects membership ops on it. */
+  const showMembers = role.name !== SystemRoles.USER;
 
   return (
     <div
@@ -70,6 +75,17 @@ export default function RoleRow({
           onClick={onAdd}
         >
           <Plus className="size-4" aria-hidden="true" />
+        </button>
+      ) : null}
+      {showMembers ? (
+        <button
+          type="button"
+          title={localize('com_admin_role_action_members')}
+          aria-label={localize('com_admin_role_action_members')}
+          className="shrink-0 text-text-secondary hover:text-text-primary"
+          onClick={onManageMembers}
+        >
+          <Users className="size-4" aria-hidden="true" />
         </button>
       ) : null}
       <button
