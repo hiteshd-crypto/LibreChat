@@ -40,6 +40,7 @@ let deleteRoleByName: ReturnType<typeof createRoleMethods>['deleteRoleByName'];
 let updateUsersByRole: ReturnType<typeof createRoleMethods>['updateUsersByRole'];
 let updateUsersRoleByIds: ReturnType<typeof createRoleMethods>['updateUsersRoleByIds'];
 let listUsersByRole: ReturnType<typeof createRoleMethods>['listUsersByRole'];
+let listUsersByRoles: ReturnType<typeof createRoleMethods>['listUsersByRoles'];
 let countUsersByRole: ReturnType<typeof createRoleMethods>['countUsersByRole'];
 let updateRoleByName: ReturnType<typeof createRoleMethods>['updateRoleByName'];
 let listRoles: ReturnType<typeof createRoleMethods>['listRoles'];
@@ -64,6 +65,7 @@ beforeAll(async () => {
   updateUsersByRole = methods.updateUsersByRole;
   updateUsersRoleByIds = methods.updateUsersRoleByIds;
   listUsersByRole = methods.listUsersByRole;
+  listUsersByRoles = methods.listUsersByRoles;
   countUsersByRole = methods.countUsersByRole;
   listRoles = methods.listRoles;
   countRoles = methods.countRoles;
@@ -1130,6 +1132,38 @@ describe('listUsersByRole', () => {
     expect(users[0]._id).toBeDefined();
     expect('password' in users[0]).toBe(false);
     expect('username' in users[0]).toBe(false);
+  });
+});
+
+describe('listUsersByRoles', () => {
+  it('returns users holding any of the given roles', async () => {
+    await User.create([
+      { name: 'Alice', email: 'alice@test.com', role: 'editor', username: 'alice' },
+      { name: 'Bob', email: 'bob@test.com', role: 'viewer', username: 'bob' },
+      { name: 'Carol', email: 'carol@test.com', role: SystemRoles.USER, username: 'carol' },
+    ]);
+
+    const users = await listUsersByRoles(['editor', 'viewer']);
+
+    expect(users).toHaveLength(2);
+    const names = users.map((u) => u.name).sort();
+    expect(names).toEqual(['Alice', 'Bob']);
+  });
+
+  it('returns an empty array for an empty role list without querying', async () => {
+    await User.create({
+      name: 'Alice',
+      email: 'alice@test.com',
+      role: 'editor',
+      username: 'alice',
+    });
+    const users = await listUsersByRoles([]);
+    expect(users).toEqual([]);
+  });
+
+  it('returns an empty array when no users hold any of the given roles', async () => {
+    const users = await listUsersByRoles(['nonexistent']);
+    expect(users).toEqual([]);
   });
 });
 

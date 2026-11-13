@@ -279,3 +279,60 @@ export interface TAdminUserBalanceConflict {
   error: string;
   balance: TAdminUserBalance;
 }
+
+/** One of a root user's current descendants in the role hierarchy — an eligible grant recipient. */
+export interface TTokenGrantDescendant {
+  userId: string;
+  name: string;
+  email: string;
+}
+
+export interface TTokenGrantDescendantsResponse {
+  descendants: TTokenGrantDescendant[];
+}
+
+export interface TTokenGrantPreviewRequest {
+  rootUserId: string;
+  recipientUserIds: string[];
+  totalAmount: number;
+}
+
+export interface TTokenGrantPreviewRow {
+  userId: string;
+  name: string;
+  currentBalance: number;
+  newBalance: number;
+}
+
+export interface TTokenGrantPreviewResponse {
+  /** The identical amount every participant (root + recipients) receives — no remainder. */
+  perParticipantAmount: number;
+  rows: TTokenGrantPreviewRow[];
+}
+
+export interface TTokenGrantConfirmRequest {
+  rootUserId: string;
+  recipientUserIds: string[];
+  totalAmount: number;
+  /** The current balances shown in the preview, keyed by userId — used only as a staleness
+   * check; the server always recomputes the actual allocation and new balances itself. */
+  expectedBalances: Record<string, number>;
+}
+
+export interface TTokenGrantConfirmRow {
+  userId: string;
+  name: string;
+  previousBalance: number;
+  newBalance: number;
+}
+
+export interface TTokenGrantConfirmResponse {
+  rows: TTokenGrantConfirmRow[];
+  committedAt: string;
+}
+
+/** The 409 body returned when a participant's live balance no longer matches the preview. */
+export interface TTokenGrantStaleError {
+  error: string;
+  stale: Array<{ userId: string; expected: number; current: number }>;
+}

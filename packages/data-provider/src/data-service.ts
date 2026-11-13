@@ -1412,6 +1412,25 @@ export function setAdminUserBalance(
   return request.patch(endpoints.adminUserBalance(userId), body);
 }
 
+/* Admin — hierarchical token grant (backed by /api/admin/token-distribution*) */
+export function getAdminTokenGrantDescendants(
+  rootUserId: string,
+): Promise<adm.TTokenGrantDescendantsResponse> {
+  return request.get(endpoints.adminTokenGrantDescendants(rootUserId));
+}
+
+export function previewAdminTokenGrant(
+  body: adm.TTokenGrantPreviewRequest,
+): Promise<adm.TTokenGrantPreviewResponse> {
+  return request.post(endpoints.adminTokenGrantPreview(), body);
+}
+
+export function confirmAdminTokenGrant(
+  body: adm.TTokenGrantConfirmRequest,
+): Promise<adm.TTokenGrantConfirmResponse> {
+  return request.post(endpoints.adminTokenGrantConfirm(), body);
+}
+
 export function listAdminRoleMembers(
   roleKey: string,
   params?: { limit?: number; offset?: number },

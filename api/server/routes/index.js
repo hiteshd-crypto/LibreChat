@@ -9,6 +9,7 @@ const adminLangfuse = require('./admin/langfuse');
 const adminGrants = require('./admin/grants');
 const adminPricing = require('./admin/pricing');
 const adminBalance = require('./admin/balance');
+const adminTokenDistribution = require('./admin/tokenDistribution');
 const adminGroups = require('./admin/groups');
 const adminHierarchy = require('./admin/hierarchy');
 const adminRoles = require('./admin/roles');
@@ -66,6 +67,7 @@ module.exports = {
   adminAuditLog,
   adminPricing,
   adminBalance,
+  adminTokenDistribution,
   keys,
   apiKeys,
   user,

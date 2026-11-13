@@ -62,6 +62,7 @@ export enum QueryKeys {
   adminRoleMembers = 'adminRoleMembers',
   adminPricing = 'adminPricing',
   adminUserBalance = 'adminUserBalance',
+  adminTokenGrantDescendants = 'adminTokenGrantDescendants',
   adminAllUsers = 'adminAllUsers',
   adminUsers = 'adminUsers',
   adminUserSearch = 'adminUserSearch',

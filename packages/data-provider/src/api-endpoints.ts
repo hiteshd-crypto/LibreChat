@@ -547,6 +547,10 @@ export const adminPricingRate = (modelKey: string) =>
   `${adminPricing()}/${encodeURIComponent(modelKey)}`;
 export const adminUserBalance = (userId: string) =>
   `${BASE_URL}/api/admin/balance/${encodeURIComponent(userId)}`;
+export const adminTokenGrantDescendants = (rootUserId: string) =>
+  `${BASE_URL}/api/admin/token-distribution/${encodeURIComponent(rootUserId)}/descendants`;
+export const adminTokenGrantPreview = () => `${BASE_URL}/api/admin/token-distribution/preview`;
+export const adminTokenGrantConfirm = () => `${BASE_URL}/api/admin/token-distribution/confirm`;
 export const getRole = (roleName: string) => `${roles()}/${encodeURIComponent(roleName)}`;
 export const updatePromptPermissions = (roleName: string) => `${getRole(roleName)}/prompts`;
 export const updateMemoryPermissions = (roleName: string) => `${getRole(roleName)}/memories`;

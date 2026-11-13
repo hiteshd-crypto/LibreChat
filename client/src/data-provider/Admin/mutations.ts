@@ -24,6 +24,11 @@ import type {
   TTransferPreviewResponse,
   TTransferConfirmRequest,
   TTransferConfirmResponse,
+  TTokenGrantPreviewRequest,
+  TTokenGrantPreviewResponse,
+  TTokenGrantConfirmRequest,
+  TTokenGrantConfirmResponse,
+  TTokenGrantStaleError,
 } from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
 
@@ -345,6 +350,39 @@ export const useTransferConfirm = (): UseMutationResult<
         queryClient.setQueryData([QueryKeys.adminUserBalance, side.userId], {
           userId: side.userId,
           tokenCredits: side.newBalance,
+          hasRecord: true,
+        }),
+      );
+    },
+  });
+};
+
+export const useTokenGrantPreview = (): UseMutationResult<
+  TTokenGrantPreviewResponse,
+  Error,
+  TTokenGrantPreviewRequest
+> => useMutation((body) => dataService.previewAdminTokenGrant(body));
+
+/** The `stale` diff from a 409 "balances changed since preview" response, or `null` otherwise. */
+export const getTokenGrantStaleError = (error: unknown): TTokenGrantStaleError['stale'] | null => {
+  if (!axios.isAxiosError(error) || error.response?.status !== 409) {
+    return null;
+  }
+  return (error.response.data as Partial<TTokenGrantStaleError>).stale ?? null;
+};
+
+export const useTokenGrantConfirm = (): UseMutationResult<
+  TTokenGrantConfirmResponse,
+  Error,
+  TTokenGrantConfirmRequest
+> => {
+  const queryClient = useQueryClient();
+  return useMutation((body) => dataService.confirmAdminTokenGrant(body), {
+    onSuccess: (data) => {
+      data.rows.forEach((row) =>
+        queryClient.setQueryData([QueryKeys.adminUserBalance, row.userId], {
+          userId: row.userId,
+          tokenCredits: row.newBalance,
           hasRecord: true,
         }),
       );

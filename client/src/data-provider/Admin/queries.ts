@@ -16,6 +16,7 @@ import type {
   TDepartmentBalanceResponse,
   TDepartmentMembersResponse,
   TAdminUserConversationsResponse,
+  TTokenGrantDescendantsResponse,
 } from 'librechat-data-provider';
 import type {
   QueryObserverResult,
@@ -181,6 +182,16 @@ export const useAdminUserBalance = (
     [QueryKeys.adminUserBalance, userId],
     () => dataService.getAdminUserBalance(userId),
     { enabled: !!userId, refetchOnWindowFocus: false, ...config },
+  );
+
+export const useAdminTokenGrantDescendants = (
+  rootUserId: string,
+  config?: UseQueryOptions<TTokenGrantDescendantsResponse>,
+): QueryObserverResult<TTokenGrantDescendantsResponse> =>
+  useQuery<TTokenGrantDescendantsResponse>(
+    [QueryKeys.adminTokenGrantDescendants, rootUserId],
+    () => dataService.getAdminTokenGrantDescendants(rootUserId),
+    { enabled: !!rootUserId, refetchOnWindowFocus: false, ...config },
   );
 
 export const useAdminUserSearch = (

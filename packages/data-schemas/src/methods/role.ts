@@ -74,6 +74,7 @@ export function createRoleMethods(
     roleName: string,
     options?: { limit?: number; offset?: number },
   ) => Promise<IUser[]>;
+  listUsersByRoles: (roleNames: string[]) => Promise<IUser[]>;
   countUsersByRole: (roleName: string) => Promise<number>;
   getAncestorRoleKeys: (roleKey: string) => Promise<string[]>;
   getDescendantRoleKeys: (roleKey: string) => Promise<string[]>;
@@ -847,6 +848,17 @@ export function createRoleMethods(
     return await User.countDocuments({ role: roleName });
   }
 
+  /** Users holding any of the given roles — the multi-role sibling of `listUsersByRole`. */
+  async function listUsersByRoles(roleNames: string[]): Promise<IUser[]> {
+    if (roleNames.length === 0) {
+      return [];
+    }
+    const User = mongoose.models.User as Model<IUser>;
+    return await User.find({ role: { $in: roleNames } })
+      .select('_id name email avatar role')
+      .lean<IUser[]>();
+  }
+
   /**
    * Hierarchy resolver — the single owner of every `parentRole` traversal.
    *
@@ -1055,6 +1067,7 @@ export function createRoleMethods(
     findUserIdsByRole,
     updateUsersRoleByIds,
     listUsersByRole,
+    listUsersByRoles,
     countUsersByRole,
     getAncestorRoleKeys,
     getDescendantRoleKeys,
