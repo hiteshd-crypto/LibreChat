@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
-import type { IBalance, IDepartment, IUser } from '..';
+import type { IBalance, IUser } from '..';
 import { createNotificationMethods } from './notification';
 import { createSpendAlertMethods } from './spendAlert';
 import { createBalanceMethods } from './balance';
@@ -8,7 +8,6 @@ import { createUserMethods } from './user';
 
 let mongoServer: MongoMemoryReplSet;
 let Balance: mongoose.Model<IBalance>;
-let Department: mongoose.Model<IDepartment>;
 let User: mongoose.Model<IUser>;
 let spendAlert: ReturnType<typeof createSpendAlertMethods>;
 let commitGrantTransaction: ReturnType<typeof createBalanceMethods>['commitGrantTransaction'];
@@ -25,18 +24,9 @@ beforeAll(async () => {
   const models = createModels(mongoose);
   Object.assign(mongoose.models, models);
   Balance = mongoose.models.Balance;
-  Department = mongoose.models.Department;
   User = mongoose.models.User;
 
   await mongoose.connect(mongoUri);
-
-  const { createDepartmentMethods } = await import('./department');
-  const { createRoleMethods } = await import('./role');
-  const roleMethods = createRoleMethods(mongoose, {});
-  const departmentMethods = createDepartmentMethods(mongoose, {
-    getAncestorRoleKeys: roleMethods.getAncestorRoleKeys,
-    grantCapability: async () => ({ grant: undefined, created: false }),
-  });
 
   const balanceMethods = createBalanceMethods(mongoose);
   ({ commitGrantTransaction, getBalanceRecord } = balanceMethods);
@@ -47,7 +37,6 @@ beforeAll(async () => {
   const userMethods = createUserMethods(mongoose);
 
   spendAlert = createSpendAlertMethods({
-    getDepartmentForRoleKey: departmentMethods.getDepartmentForRoleKey,
     findUsers: userMethods.findUsers,
     getBalanceRecord: balanceMethods.getBalanceRecord,
     setUserAlertLevel: balanceMethods.setUserAlertLevel,
@@ -73,8 +62,7 @@ describe('checkUserOwnThreshold', () => {
     expect(notifications).toHaveLength(0);
   });
 
-  test('notifies the member and their department head once spend crosses 80%, and again at 100%', async () => {
-    await Department.create({ name: 'Sales', rootRoleKey: 'SALES_HEAD' });
+  test('notifies only the member themself once spend crosses 80%, and again at 100% — never their department head', async () => {
     const head = await User.create({
       email: 'sales-head@example.com',
       role: 'SALES_HEAD',
@@ -103,23 +91,16 @@ describe('checkUserOwnThreshold', () => {
     expect(memberAfter80.notifications).toHaveLength(1);
     expect(memberAfter80.notifications[0].type).toBe('spend_threshold');
     expect(memberAfter80.notifications[0].metadata).toMatchObject({ level: 80 });
-    const headAfter80 = await listNotificationsForUser(head._id.toString());
-    expect(headAfter80.notifications).toHaveLength(1);
-    expect(headAfter80.notifications[0].type).toBe('member_spend_threshold');
-    expect(headAfter80.notifications[0].metadata).toMatchObject({
-      memberId: member._id.toString(),
-      level: 80,
-    });
+    expect((await listNotificationsForUser(head._id.toString())).notifications).toHaveLength(0);
 
     // Spend to 0 — crosses 100%.
     await Balance.findOneAndUpdate({ user: member._id }, { tokenCredits: 0 });
     await spendAlert.checkUserOwnThreshold(member._id.toString());
     expect((await listNotificationsForUser(member._id.toString())).notifications).toHaveLength(2);
-    expect((await listNotificationsForUser(head._id.toString())).notifications).toHaveLength(2);
+    expect((await listNotificationsForUser(head._id.toString())).notifications).toHaveLength(0);
   });
 
-  test('a department head spending their own share gets only their own notification, not a duplicate', async () => {
-    await Department.create({ name: 'Ops', rootRoleKey: 'OPS_HEAD' });
+  test('a department head spending their own share gets their own notification, same as any member', async () => {
     const head = await User.create({
       email: 'ops-head@example.com',
       role: 'OPS_HEAD',
@@ -132,7 +113,9 @@ describe('checkUserOwnThreshold', () => {
 
     await spendAlert.checkUserOwnThreshold(head._id.toString());
 
-    expect((await listNotificationsForUser(head._id.toString())).notifications).toHaveLength(1);
+    const { notifications } = await listNotificationsForUser(head._id.toString());
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].type).toBe('spend_threshold');
   });
 
   test('a fresh disbursement self-heals lastAlertLevel so a later re-cross alerts again', async () => {

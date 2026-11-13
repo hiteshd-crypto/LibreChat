@@ -28,11 +28,7 @@ export default function SpendAlertModal() {
 
   const current = useMemo(() => {
     const notifications = data?.notifications ?? [];
-    return notifications.find(
-      (n) =>
-        (n.type === 'spend_threshold' || n.type === 'member_spend_threshold') &&
-        !dismissedIds.has(n._id),
-    );
+    return notifications.find((n) => n.type === 'spend_threshold' && !dismissedIds.has(n._id));
   }, [data, dismissedIds]);
 
   if (!current) {

@@ -432,7 +432,6 @@ export function createMethods(
   const userMethods = createUserMethods(mongoose, { getCache: deps.getCache });
   const balanceMethods = createBalanceMethods(mongoose);
   const spendAlertMethods = createSpendAlertMethods({
-    getDepartmentForRoleKey: departmentMethods.getDepartmentForRoleKey,
     findUsers: userMethods.findUsers,
     getBalanceRecord: balanceMethods.getBalanceRecord,
     setUserAlertLevel: balanceMethods.setUserAlertLevel,
