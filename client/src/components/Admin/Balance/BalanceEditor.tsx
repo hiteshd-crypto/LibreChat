@@ -2,10 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input, Label, Spinner, useToastContext } from '@librechat/client';
 import { useAdminUserBalance, useSetUserBalance, getBalanceConflict } from '~/data-provider';
-import { getResponseErrorMessage } from '~/utils';
+import { getResponseErrorMessage, creditsToInr, inrToCredits, formatInr } from '~/utils';
 import { NotificationSeverity } from '~/common';
 import { parseRate } from '../Pricing/rates';
-import { formatUsd } from './credits';
 import { useLocalize } from '~/hooks';
 
 const INPUT_ID = 'admin-balance-input';
@@ -39,7 +38,7 @@ export default function BalanceEditor({ userId, userName }: { userId: string; us
   }
 
   const startEditing = () => {
-    setDraft(String(data.tokenCredits));
+    setDraft(String(creditsToInr(data.tokenCredits)));
     setError(null);
     setEditing(true);
   };
@@ -50,14 +49,18 @@ export default function BalanceEditor({ userId, userName }: { userId: string; us
   };
 
   const save = () => {
-    const tokenCredits = parseRate(draft);
-    if (tokenCredits === null) {
+    const inrAmount = parseRate(draft);
+    if (inrAmount === null) {
       setError(localize('com_admin_balance_invalid'));
       return;
     }
     setError(null);
     setBalance.mutate(
-      { userId, tokenCredits, expectedTokenCredits: data.hasRecord ? data.tokenCredits : null },
+      {
+        userId,
+        tokenCredits: inrToCredits(inrAmount),
+        expectedTokenCredits: data.hasRecord ? data.tokenCredits : null,
+      },
       {
         onSuccess: () => {
           showToast({
@@ -69,7 +72,9 @@ export default function BalanceEditor({ userId, userName }: { userId: string; us
         onError: (err) => {
           const conflict = getBalanceConflict(err);
           if (conflict) {
-            setError(localize('com_admin_balance_conflict', { 0: conflict.tokenCredits }));
+            setError(
+              localize('com_admin_balance_conflict', { 0: creditsToInr(conflict.tokenCredits) }),
+            );
             return;
           }
           showToast({
@@ -81,7 +86,7 @@ export default function BalanceEditor({ userId, userName }: { userId: string; us
     );
   };
 
-  const shownCredits = editing ? parseRate(draft) : data.tokenCredits;
+  const shownInr = editing ? parseRate(draft) : creditsToInr(data.tokenCredits);
 
   return (
     <>
@@ -92,7 +97,7 @@ export default function BalanceEditor({ userId, userName }: { userId: string; us
         <Input
           id={INPUT_ID}
           inputMode="decimal"
-          value={editing ? draft : String(data.tokenCredits)}
+          value={editing ? draft : String(creditsToInr(data.tokenCredits))}
           onChange={(e) => setDraft(e.target.value)}
           readOnly={!editing}
           disabled={setBalance.isLoading}
@@ -105,9 +110,7 @@ export default function BalanceEditor({ userId, userName }: { userId: string; us
           </p>
         ) : null}
         <p className="mt-1 text-xs text-text-secondary">
-          {shownCredits === null
-            ? '—'
-            : localize('com_admin_balance_usd', { 0: formatUsd(shownCredits, locale) })}
+          {shownInr === null ? '—' : formatInr(shownInr, locale, 6)}
         </p>
         {data.hasRecord ? null : (
           <p role="status" className="mt-1 text-xs text-text-secondary">
