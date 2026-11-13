@@ -23,7 +23,7 @@ const tree = [
 ];
 
 describe('reparentBlock', () => {
-  it('allows a same-branch move that is not a cycle, no-op, or name clash', () => {
+  it('allows a same-branch move that is not a cycle or no-op', () => {
     expect(reparentBlock(tree, 'emp', 'sup')).toBeNull();
   });
 
@@ -41,9 +41,9 @@ describe('reparentBlock', () => {
     expect(reparentBlock(tree, 'emp', 'emp')).toBe('no-op');
   });
 
-  it('blocks a move that would duplicate a sibling name', () => {
+  it('allows a move that would duplicate a sibling name', () => {
     const withDupe = [...tree, r('mgr2', 'MGR', 'mgr')];
-    expect(reparentBlock(withDupe, 'mgr2', 'sup')).toBe('name-clash');
+    expect(reparentBlock(withDupe, 'mgr2', 'sup')).toBeNull();
   });
 });
 

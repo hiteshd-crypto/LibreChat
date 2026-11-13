@@ -85,7 +85,6 @@
   "com_admin_role_add_under": "Add role under {{0}}",
   "com_admin_role_move_confirm": "Move {{0}} under {{1}}?",
   "com_admin_role_move_confirm_subtree": "Move {{0}} under {{1}}? Its {{2}} sub-role(s) move with it.",
-  "com_admin_role_move_name_clash": "A role named {{0}} already exists under {{1}}",
   "com_admin_role_move_out_of_branch": "Can't move outside the {{0}} branch",
   "com_admin_role_parent_label": "Reports to",
   "com_admin_role_top_level": "Top-level branch",

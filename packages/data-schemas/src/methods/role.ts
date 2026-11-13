@@ -413,23 +413,13 @@ export function createRoleMethods(
   /**
    * Update a role addressed by its `roleKey`. A rename is a single-document write —
    * children reference the parent's `roleKey`, and users reference `roleKey`, so
-   * nothing else moves. Rejects a rename that would collide with a direct sibling.
+   * nothing else moves. Sibling role names are not required to be unique — only
+   * `roleKey` identifies a role.
    */
   async function updateRoleByName(roleRef: string, updates: Partial<IRole>): Promise<IRole> {
     const cache = deps.getCache?.(CacheKeys.ROLES);
     try {
       const Role = mongoose.models.Role as Model<IRole>;
-      if (updates.name) {
-        const self = await Role.findOne({ roleKey: roleRef }, 'parentRole').lean();
-        const clash = await Role.exists({
-          parentRole: self?.parentRole ?? null,
-          name: updates.name,
-          roleKey: { $ne: roleRef },
-        });
-        if (clash) {
-          throw new RoleConflictError(`A role named "${updates.name}" already exists here`);
-        }
-      }
       const role = await Role.findOneAndUpdate(
         { roleKey: roleRef },
         { $set: updates },
@@ -443,14 +433,6 @@ export function createRoleMethods(
       }
       return role as unknown as IRole;
     } catch (error) {
-      if (error instanceof RoleConflictError) {
-        throw error;
-      }
-      if (error && typeof error === 'object' && 'code' in error && error.code === 11000) {
-        throw new RoleConflictError(
-          `A role named "${updates.name ?? roleRef}" already exists here`,
-        );
-      }
       const updateError = new Error(
         `Failed to update role: ${(error as Error).message}`,
       ) as Error & {
@@ -697,8 +679,8 @@ export function createRoleMethods(
   /**
    * Creates a custom role. `roleData.parentRole` is the parent's `roleKey` (or
    * `null`/absent for a top-level role). `roleKey` is minted by the schema's
-   * `pre('validate')` hook. Rejects: a reserved system name; a name that collides
-   * with a direct sibling (or, at top level, another top-level role).
+   * `pre('validate')` hook. Rejects only a reserved system name — sibling role
+   * names are not required to be unique.
    */
   async function createRoleByName(roleData: Partial<IRole>): Promise<IRole> {
     const { name } = roleData;
@@ -730,33 +712,13 @@ export function createRoleMethods(
       depth = (parent.depth ?? 0) + 1;
     }
 
-    const sibling = await Role.findOne({ parentRole: parentKey, name: trimmed }).lean();
-    if (sibling) {
-      throw new RoleConflictError(
-        parentKey
-          ? `A role named "${trimmed}" already exists under this parent`
-          : `A top-level role named "${trimmed}" already exists`,
-      );
-    }
-
-    let role;
-    try {
-      role = await new Role({
-        ...roleData,
-        name: trimmed,
-        parentRole: parentKey,
-        depth,
-      }).save();
-    } catch (err) {
-      /**
-       * The `{ parentRole, name, tenantId }` unique index triggers error 11000
-       * when a concurrent request races past the `findOne` check above.
-       */
-      if (err && typeof err === 'object' && 'code' in err && err.code === 11000) {
-        throw new RoleConflictError(`A role named "${trimmed}" already exists here`);
-      }
-      throw err;
-    }
+    // Sibling role names are not required to be unique — only `roleKey` identifies a role.
+    const role = await new Role({
+      ...roleData,
+      name: trimmed,
+      parentRole: parentKey,
+      depth,
+    }).save();
     try {
       const cache = deps.getCache?.(CacheKeys.ROLES);
       if (cache) {
@@ -994,9 +956,9 @@ export function createRoleMethods(
   /**
    * Re-parents a role addressed by its `roleKey` and recomputes `depth` for it
    * and its whole subtree. Throws a plain `Error` for a missing role/parent or a
-   * system role; `RoleConflictError` for a cycle, a cross-branch move (the new
-   * parent's top-level root differs from the role's), or a name clash with an
-   * existing child of the new parent. `newParentKey === null` is rejected for a
+   * system role; `RoleConflictError` for a cycle or a cross-branch move (the new
+   * parent's top-level root differs from the role's). Sibling role names are not
+   * required to be unique. `newParentKey === null` is rejected for a
    * non-top-level role (its root would change) and is a no-op for a top-level one.
    */
   async function setRoleParent(roleKey: string, newParentKey: string | null): Promise<IRole> {
@@ -1032,19 +994,6 @@ export function createRoleMethods(
     const newRoot = newParentKey != null ? rootKeyOf(graph, newParentKey) : roleKey;
     if (currentRoot !== newRoot) {
       throw new RoleConflictError('cannot move a role to a different branch');
-    }
-
-    if (newParentKey != null) {
-      const clash = await Role.exists({
-        parentRole: newParentKey,
-        name: self.name,
-        roleKey: { $ne: roleKey },
-      });
-      if (clash) {
-        throw new RoleConflictError(
-          `A role named "${self.name}" already exists under the target parent`,
-        );
-      }
     }
 
     const children = buildChildrenMap(graph);

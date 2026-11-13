@@ -882,17 +882,17 @@ describe('createRoleByName', () => {
     );
   });
 
-  it('rejects a duplicate top-level name', async () => {
+  it('allows a duplicate top-level name', async () => {
     await createRoleByName({ name: 'editor' });
-    await expect(createRoleByName({ name: 'editor' })).rejects.toThrow(/already exists/);
+    await expect(createRoleByName({ name: 'editor' })).resolves.toBeDefined();
   });
 
-  it('rejects a duplicate direct sibling name', async () => {
+  it('allows a duplicate direct sibling name', async () => {
     const branch = await createRoleByName({ name: 'BRANCH_SIB' });
     await createRoleByName({ name: 'SIB', parentRole: branch.roleKey });
-    await expect(createRoleByName({ name: 'SIB', parentRole: branch.roleKey })).rejects.toThrow(
-      RoleConflictError,
-    );
+    await expect(
+      createRoleByName({ name: 'SIB', parentRole: branch.roleKey }),
+    ).resolves.toBeDefined();
   });
 
   it('allows the same child name under different parents', async () => {
@@ -1064,11 +1064,11 @@ describe('updateRoleByName', () => {
     expect(storedB?.parentRole).toBe(parent.roleKey);
   });
 
-  it('rejects renaming a role onto a direct sibling name', async () => {
+  it('allows renaming a role onto a direct sibling name', async () => {
     const parent = await createRoleByName({ name: 'BRANCH_D' });
     const x = await createRoleByName({ name: 'XX', parentRole: parent.roleKey });
     await createRoleByName({ name: 'YY', parentRole: parent.roleKey });
-    await expect(updateRoleByName(x.roleKey, { name: 'YY' })).rejects.toThrow(RoleConflictError);
+    await expect(updateRoleByName(x.roleKey, { name: 'YY' })).resolves.toBeDefined();
   });
 });
 
@@ -1344,25 +1344,5 @@ describe('countRoles', () => {
 
   it('returns 0 when no roles exist', async () => {
     expect(await countRoles()).toBe(0);
-  });
-});
-
-describe('createRoleByName - duplicate key race', () => {
-  beforeEach(async () => {
-    await Role.deleteMany({});
-  });
-
-  it('throws RoleConflictError on concurrent insert (11000)', async () => {
-    await createRoleByName({ name: 'editor' });
-
-    const insertSpy = jest.spyOn(Role.prototype, 'save').mockImplementationOnce(() => {
-      const err = new Error('E11000 duplicate key error') as Error & { code: number };
-      err.code = 11000;
-      throw err;
-    });
-
-    await expect(createRoleByName({ name: 'editor2' })).rejects.toThrow(/already exists/);
-
-    insertSpy.mockRestore();
   });
 });

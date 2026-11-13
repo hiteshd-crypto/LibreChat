@@ -120,6 +120,5 @@ roleSchema.pre('validate', function (next) {
 });
 
 roleSchema.index({ roleKey: 1, tenantId: 1 }, { unique: true });
-roleSchema.index({ parentRole: 1, name: 1, tenantId: 1 }, { unique: true });
 
 export default roleSchema;
