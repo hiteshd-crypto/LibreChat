@@ -172,7 +172,7 @@ export default function LocalizedDateRangePicker({
                   max={futureDatesDisabled ? today : undefined}
                   value={pendingStartDate}
                   onChange={(event) => setPendingStartDate(event.target.value)}
-                  className="h-9 min-w-0 rounded-md border border-border-medium bg-surface-primary px-2 text-sm text-text-primary outline-none focus:border-border-heavy"
+                  className="h-9 min-w-0 rounded-md border border-border-medium bg-surface-primary px-2 text-sm text-text-primary outline-none focus:border-border-heavy dark:[color-scheme:dark]"
                 />
               </label>
               <label className="flex min-w-0 flex-col gap-1.5">
@@ -184,7 +184,7 @@ export default function LocalizedDateRangePicker({
                   max={endDateMax}
                   value={pendingEndDate}
                   onChange={(event) => setPendingEndDate(event.target.value)}
-                  className="h-9 min-w-0 rounded-md border border-border-medium bg-surface-primary px-2 text-sm text-text-primary outline-none focus:border-border-heavy"
+                  className="h-9 min-w-0 rounded-md border border-border-medium bg-surface-primary px-2 text-sm text-text-primary outline-none focus:border-border-heavy dark:[color-scheme:dark]"
                 />
               </label>
             </div>

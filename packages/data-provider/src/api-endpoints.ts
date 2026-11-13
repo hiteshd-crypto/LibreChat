@@ -551,6 +551,26 @@ export const adminTokenGrantDescendants = (rootUserId: string) =>
   `${BASE_URL}/api/admin/token-distribution/${encodeURIComponent(rootUserId)}/descendants`;
 export const adminTokenGrantPreview = () => `${BASE_URL}/api/admin/token-distribution/preview`;
 export const adminTokenGrantConfirm = () => `${BASE_URL}/api/admin/token-distribution/confirm`;
+/* Audit log */
+export const adminAuditLog = (params?: {
+  limit?: number;
+  offset?: number;
+  action?: string;
+  outcome?: string;
+  from?: string;
+  to?: string;
+  targetType?: string;
+  targetQuery?: string;
+}) => `${BASE_URL}/api/admin/audit-log${buildQuery(params ?? {})}`;
+export const adminAuditLogEntry = (id: string) =>
+  `${BASE_URL}/api/admin/audit-log/${encodeURIComponent(id)}`;
+export const adminAuditLogExportCsv = (params?: {
+  action?: string;
+  outcome?: string;
+  from?: string;
+  to?: string;
+}) => `${BASE_URL}/api/admin/audit-log/export.csv${buildQuery(params ?? {})}`;
+export const adminAuditLogVerify = () => `${BASE_URL}/api/admin/audit-log/verify`;
 export const getRole = (roleName: string) => `${roles()}/${encodeURIComponent(roleName)}`;
 export const updatePromptPermissions = (roleName: string) => `${getRole(roleName)}/prompts`;
 export const updateMemoryPermissions = (roleName: string) => `${getRole(roleName)}/memories`;

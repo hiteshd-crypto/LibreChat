@@ -59,10 +59,12 @@ export default defineConfig(({ command }) => ({
       '/api': {
         target: backendURL,
         changeOrigin: true,
+        xfwd: true,
       },
       '/oauth': {
         target: backendURL,
         changeOrigin: true,
+        xfwd: true,
       },
     },
   },

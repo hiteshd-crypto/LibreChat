@@ -74,6 +74,7 @@ export enum QueryKeys {
   myDepartment = 'myDepartment',
   adminDepartmentBalance = 'adminDepartmentBalance',
   adminMyDepartmentMembers = 'adminMyDepartmentMembers',
+  adminAuditLog = 'adminAuditLog',
   conversationTags = 'conversationTags',
   health = 'health',
   userTerms = 'userTerms',

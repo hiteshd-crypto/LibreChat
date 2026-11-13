@@ -4,6 +4,7 @@ const { webcrypto } = require('node:crypto');
 const {
   logger,
   getTenantId,
+  SystemCapabilities,
   DEFAULT_SESSION_EXPIRY,
   DEFAULT_REFRESH_TOKEN_EXPIRY,
 } = require('@librechat/data-schemas');
@@ -25,6 +26,7 @@ const {
   normalizeExpiresIn,
   createOpenIDSessionIdentity,
   resolveAppConfigForUser,
+  buildAuditContext,
 } = require('@librechat/api');
 const {
   findUser,
@@ -42,10 +44,64 @@ const {
   generateToken,
   deleteUserById,
   generateRefreshToken,
+  recordAuditEntry,
 } = require('~/models');
+const { hasCapability } = require('~/server/middleware/roles/capabilities');
 const { registerSchema } = require('~/strategies/validators');
 const { getAppConfig } = require('~/server/services/Config');
 const { sendEmail } = require('~/server/utils');
+
+/** `name || username || email`, matching the display-name convention used by
+ * every other admin audit emitter (e.g. `packages/api/src/admin/tokenDistribution.ts`). */
+const displayName = (user) => user?.name || user?.username || user?.email || 'Unknown';
+
+/** Mirrors the `isAdmin` check in `packages/api/src/admin/hierarchy.ts`: the
+ * `ADMIN` system role, or any role explicitly granted `ACCESS_ADMIN` (e.g. a
+ * custom "Super Admin" role). */
+const isAdminCapable = async (user) => {
+  if (!user) {
+    return false;
+  }
+  if (user.role === SystemRoles.ADMIN) {
+    return true;
+  }
+  const capabilityUser = {
+    id: user._id?.toString() ?? user.id ?? '',
+    role: user.role ?? '',
+    tenantId: user.tenantId,
+    idOnTheSource: user.idOnTheSource ?? null,
+  };
+  return hasCapability(capabilityUser, SystemCapabilities.ACCESS_ADMIN);
+};
+
+/** Records `auth.login`/`auth.logout` for an Admin/Super Admin caller only —
+ * fail-open, like every other audit emitter in this codebase, so a logging
+ * failure never blocks a login or logout. */
+const recordAdminAuthAudit = async (req, user, action) => {
+  try {
+    if (!(await isAdminCapable(user))) {
+      return;
+    }
+    const userId = user._id?.toString() ?? user.id;
+    if (!userId) {
+      return;
+    }
+    const actor = { type: 'user', id: userId, name: displayName(user) };
+    await recordAuditEntry({
+      action,
+      outcome: 'success',
+      actor,
+      target: actor,
+      context: buildAuditContext(req),
+      tenantId: user.tenantId,
+    });
+  } catch (err) {
+    logger.error(`[AuthService] ${action} audit write failed`, err);
+  }
+};
+
+const recordAdminLoginAudit = (req, user) => recordAdminAuthAudit(req, user, 'auth.login');
+const recordAdminLogoutAudit = (req, user) => recordAdminAuthAudit(req, user, 'auth.logout');
 
 const domains = {
   client: process.env.DOMAIN_CLIENT,
@@ -1021,4 +1077,6 @@ module.exports = {
   setCloudFrontAuthCookies,
   requestPasswordReset,
   resendVerificationEmail,
+  recordAdminLoginAudit,
+  recordAdminLogoutAudit,
 };

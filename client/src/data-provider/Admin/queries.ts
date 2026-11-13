@@ -17,6 +17,8 @@ import type {
   TDepartmentMembersResponse,
   TAdminUserConversationsResponse,
   TTokenGrantDescendantsResponse,
+  TAdminAuditLogListParams,
+  TAdminAuditLogListResponse,
 } from 'librechat-data-provider';
 import type {
   QueryObserverResult,
@@ -245,4 +247,22 @@ export const useAdminUserMessages = (
     [QueryKeys.adminUserMessages, userId, conversationId],
     () => dataService.getAdminUserConversationMessages(userId, conversationId),
     { enabled: !!userId && !!conversationId, refetchOnWindowFocus: false, ...config },
+  );
+
+export const AUDIT_LOG_PAGE_SIZE = 25;
+
+export const useAdminAuditLog = (
+  page: number,
+  filters: Omit<TAdminAuditLogListParams, 'limit' | 'offset'> = {},
+  config?: UseQueryOptions<TAdminAuditLogListResponse>,
+): QueryObserverResult<TAdminAuditLogListResponse> =>
+  useQuery<TAdminAuditLogListResponse>(
+    [QueryKeys.adminAuditLog, page, filters],
+    () =>
+      dataService.getAdminAuditLog({
+        ...filters,
+        limit: AUDIT_LOG_PAGE_SIZE,
+        offset: (page - 1) * AUDIT_LOG_PAGE_SIZE,
+      }),
+    { keepPreviousData: true, refetchOnWindowFocus: false, staleTime: 30_000, ...config },
   );

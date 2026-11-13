@@ -29,6 +29,7 @@ import type {
   TTokenGrantConfirmRequest,
   TTokenGrantConfirmResponse,
   TTokenGrantStaleError,
+  TAdminAuditLogVerifyResponse,
 } from 'librechat-data-provider';
 import type { UseMutationResult } from '@tanstack/react-query';
 
@@ -389,3 +390,11 @@ export const useTokenGrantConfirm = (): UseMutationResult<
     },
   });
 };
+
+/** Triggers the hash-chain integrity check on demand — it isn't cheap enough to
+ * run automatically, so it's modeled as a mutation rather than a query. */
+export const useVerifyAdminAuditLog = (): UseMutationResult<
+  TAdminAuditLogVerifyResponse,
+  Error,
+  void
+> => useMutation(() => dataService.verifyAdminAuditLog());

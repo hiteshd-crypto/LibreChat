@@ -7,7 +7,7 @@ const {
   generateAdminExchangeCode,
 } = require('@librechat/api');
 const { syncUserEntraGroupMemberships } = require('~/server/services/PermissionService');
-const { setAuthTokens } = require('~/server/services/AuthService');
+const { setAuthTokens, recordAdminLoginAudit } = require('~/server/services/AuthService');
 const { sendOpenIDAuthResponse } = require('~/server/services/OpenIDRefreshRecovery');
 const getLogStores = require('~/cache/getLogStores');
 const { checkBan } = require('~/server/middleware');
@@ -89,6 +89,7 @@ function createOAuthHandler(redirectUri = domains.client) {
       } else {
         await setAuthTokens(req.user._id, res, null, req);
       }
+      await recordAdminLoginAudit(req, req.user);
       res.redirect(redirectUri);
     } catch (err) {
       logger.error('Error in setting authentication tokens:', err);

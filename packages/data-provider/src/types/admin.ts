@@ -24,6 +24,8 @@ export interface TMyHierarchy {
     departmentName: string;
     rootRoleKey: string;
   };
+  /** Whether the caller holds `READ_AUDIT_LOG`, independent of `isAdmin`. */
+  canReadAuditLog: boolean;
 }
 
 /** A Department is a thin label over one top-level custom-role branch. */
@@ -335,4 +337,62 @@ export interface TTokenGrantConfirmResponse {
 export interface TTokenGrantStaleError {
   error: string;
   stale: Array<{ userId: string; expected: number; current: number }>;
+}
+
+/** Denormalized actor identity captured at write time on an audit entry. */
+export interface TAdminAuditActor {
+  type: string;
+  id?: string;
+  name: string;
+}
+
+/** Generic target of an audited action — a user, department, role, etc. */
+export interface TAdminAuditTarget {
+  type: string;
+  id?: string;
+  name?: string;
+}
+
+/** Audit log entry as returned by `GET /api/admin/audit-log`. */
+export interface TAdminAuditLogEntry {
+  id: string;
+  category: string;
+  action: string;
+  outcome: string;
+  severity: string;
+  actor: TAdminAuditActor;
+  target: TAdminAuditTarget;
+  metadata?: Record<string, string | number | boolean | null>;
+  context?: { requestId?: string; ip?: string; userAgent?: string; sessionId?: string };
+  tenantId?: string;
+  integrity: { seq: number; hash: string; prevHash: string };
+  /** ISO 8601 string. */
+  timestamp: string;
+}
+
+export interface TAdminAuditLogListParams {
+  limit?: number;
+  offset?: number;
+  action?: string;
+  outcome?: string;
+  from?: string;
+  to?: string;
+  targetType?: string;
+  targetQuery?: string;
+}
+
+export interface TAdminAuditLogListResponse {
+  entries: TAdminAuditLogEntry[];
+  total: number;
+  /** Pass as `cursor` to fetch the next page; `null` when the page is the last. */
+  nextCursor: number | null;
+}
+
+export interface TAdminAuditLogVerifyResponse {
+  ok: boolean;
+  chainKey: string;
+  checked: number;
+  brokenAt?: number;
+  reason?: string;
+  range?: { firstSeq: number; lastSeq: number };
 }

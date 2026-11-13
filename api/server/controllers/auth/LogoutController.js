@@ -1,7 +1,7 @@
 const cookies = require('cookie');
 const { isEnabled, math, clearCloudFrontCookies } = require('@librechat/api');
 const { logger, DEFAULT_REFRESH_TOKEN_EXPIRY } = require('@librechat/data-schemas');
-const { logoutUser } = require('~/server/services/AuthService');
+const { logoutUser, recordAdminLogoutAudit } = require('~/server/services/AuthService');
 const { deleteAllRefreshTokenBridges } = require('~/server/services/RefreshTokenBridge');
 const { revokeOpenIDRefreshTokenChain } = require('~/server/services/OpenIDRefreshRecovery');
 const { getOpenIdConfig } = require('~/strategies');
@@ -78,6 +78,9 @@ const logoutController = async (req, res) => {
       }
     }
     const { status, message } = logout;
+    if (status === 200) {
+      await recordAdminLogoutAudit(req, req.user);
+    }
 
     res.clearCookie('refreshToken');
     res.clearCookie('openid_access_token');

@@ -1,6 +1,7 @@
 const cookies = require('cookie');
 
 const mockLogoutUser = jest.fn();
+const mockRecordAdminLogoutAudit = jest.fn();
 const mockLogger = { warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
 const mockIsEnabled = jest.fn();
 const mockGetOpenIdConfig = jest.fn();
@@ -20,6 +21,7 @@ jest.mock('@librechat/data-schemas', () => ({
 }));
 jest.mock('~/server/services/AuthService', () => ({
   logoutUser: (...args) => mockLogoutUser(...args),
+  recordAdminLogoutAudit: (...args) => mockRecordAdminLogoutAudit(...args),
 }));
 jest.mock('~/server/services/RefreshTokenBridge', () => ({
   deleteAllRefreshTokenBridges: (...args) => mockDeleteAllRefreshTokenBridges(...args),

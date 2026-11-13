@@ -6,6 +6,7 @@ jest.mock(
     getTenantId: jest.fn(() => undefined),
     DEFAULT_SESSION_EXPIRY: 900000,
     DEFAULT_REFRESH_TOKEN_EXPIRY: 604800000,
+    SystemCapabilities: { ACCESS_ADMIN: 'access:admin' },
   }),
   { virtual: true },
 );
@@ -92,6 +93,7 @@ jest.mock(
       })),
       parseCloudFrontCookieScope: jest.fn(() => null),
       CLOUDFRONT_SCOPE_COOKIE: 'LibreChat-CloudFront-Scope',
+      buildAuditContext: jest.fn(() => ({})),
     };
   },
   { virtual: true },
@@ -112,6 +114,10 @@ jest.mock('~/models', () => ({
   generateToken: jest.fn(),
   deleteUserById: jest.fn(),
   generateRefreshToken: jest.fn(),
+  recordAuditEntry: jest.fn(),
+}));
+jest.mock('~/server/middleware/roles/capabilities', () => ({
+  hasCapability: jest.fn(() => false),
 }));
 jest.mock('~/strategies/validators', () => ({
   registerSchema: {
@@ -167,6 +173,11 @@ let resendVerificationEmail;
 let setAuthTokens;
 let setCloudFrontAuthCookies;
 let verifyEmail;
+let recordAdminLoginAudit;
+let recordAdminLogoutAudit;
+let recordAuditEntry;
+let buildAuditContext;
+let hasCapability;
 
 jest.isolateModules(() => {
   ({
@@ -179,6 +190,7 @@ jest.isolateModules(() => {
     getCloudFrontConfig,
     parseCloudFrontCookieScope,
     storeOpenIdSession,
+    buildAuditContext,
   } = require('@librechat/api'));
   jwt = require('jsonwebtoken');
   ({ logger, getTenantId } = require('@librechat/data-schemas'));
@@ -196,7 +208,9 @@ jest.isolateModules(() => {
     deleteSession,
     createToken,
     deleteTokens,
+    recordAuditEntry,
   } = require('~/models'));
+  ({ hasCapability } = require('~/server/middleware/roles/capabilities'));
   ({ getAppConfig } = require('~/server/services/Config'));
   ({ sendEmail } = require('~/server/utils'));
   bcrypt = require('bcryptjs');
@@ -210,6 +224,8 @@ jest.isolateModules(() => {
     setAuthTokens,
     setCloudFrontAuthCookies,
     verifyEmail,
+    recordAdminLoginAudit,
+    recordAdminLogoutAudit,
   } = require('./AuthService'));
 });
 
@@ -1687,5 +1703,72 @@ describe('registerUser - allowedDomains admin-panel override', () => {
     expect(result.message).toMatch(/cannot be used/i);
     // Domain check must happen before any DB user lookup.
     expect(findUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('recordAdminLoginAudit / recordAdminLogoutAudit', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    hasCapability.mockResolvedValue(false);
+  });
+
+  const req = { headers: {} };
+
+  it('records auth.login for a user with the ADMIN role', async () => {
+    const user = { _id: 'admin-1', role: 'ADMIN', name: 'Ann Admin' };
+    await recordAdminLoginAudit(req, user);
+
+    expect(recordAuditEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.login',
+        outcome: 'success',
+        actor: expect.objectContaining({ type: 'user', id: 'admin-1', name: 'Ann Admin' }),
+        target: expect.objectContaining({ type: 'user', id: 'admin-1', name: 'Ann Admin' }),
+      }),
+    );
+    expect(buildAuditContext).toHaveBeenCalledWith(req);
+  });
+
+  it('records auth.login for a non-ADMIN user holding ACCESS_ADMIN', async () => {
+    hasCapability.mockResolvedValue(true);
+    const user = { _id: 'head-1', role: 'DEPT_HEAD', name: 'Dept Head' };
+    await recordAdminLoginAudit(req, user);
+
+    expect(hasCapability).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'head-1', role: 'DEPT_HEAD' }),
+      'access:admin',
+    );
+    expect(recordAuditEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auth.login' }),
+    );
+  });
+
+  it('records auth.logout for an admin-capable user', async () => {
+    const user = { _id: 'admin-1', role: 'ADMIN', name: 'Ann Admin' };
+    await recordAdminLogoutAudit(req, user);
+
+    expect(recordAuditEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auth.logout' }),
+    );
+  });
+
+  it('does not record anything for a plain USER', async () => {
+    const user = { _id: 'user-1', role: 'USER', name: 'Plain User' };
+    await recordAdminLoginAudit(req, user);
+    await recordAdminLogoutAudit(req, user);
+
+    expect(recordAuditEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not throw when there is no user', async () => {
+    await expect(recordAdminLoginAudit(req, undefined)).resolves.toBeUndefined();
+    expect(recordAuditEntry).not.toHaveBeenCalled();
+  });
+
+  it('is fail-open when recordAuditEntry itself rejects', async () => {
+    recordAuditEntry.mockRejectedValueOnce(new Error('write failed'));
+    const user = { _id: 'admin-1', role: 'ADMIN', name: 'Ann Admin' };
+
+    await expect(recordAdminLoginAudit(req, user)).resolves.toBeUndefined();
   });
 });

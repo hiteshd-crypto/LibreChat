@@ -5,7 +5,7 @@ const {
   getTOTPSecret,
   verifyBackupCode,
 } = require('~/server/services/twoFactorService');
-const { setAuthTokens } = require('~/server/services/AuthService');
+const { setAuthTokens, recordAdminLoginAudit } = require('~/server/services/AuthService');
 const { getUserById } = require('~/models');
 
 /**
@@ -51,6 +51,7 @@ const verify2FAWithTempToken = async (req, res) => {
     userData.id = user._id.toString();
 
     const authToken = await setAuthTokens(user._id, res, null, req);
+    await recordAdminLoginAudit(req, user);
     return res.status(200).json({ token: authToken, user: userData });
   } catch (err) {
     logger.error('[verify2FAWithTempToken]', err);

@@ -73,9 +73,12 @@ export const AUDIT_ACTIONS = [
   'balance.departmental_distribution',
   'balance.internal_distribution',
   'balance.self_grant',
+  'balance.token_grant',
   'department.created',
   'department.deleted',
   'department.head_assigned',
+  'auth.login',
+  'auth.logout',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -87,6 +90,9 @@ export const AUDIT_ACTION_CATEGORY: Record<AuditAction, AuditCategory> = {
   'balance.departmental_distribution': 'balance',
   'balance.internal_distribution': 'balance',
   'balance.self_grant': 'balance',
+  'balance.token_grant': 'balance',
+  'auth.login': 'auth',
+  'auth.logout': 'auth',
   'department.created': 'grant',
   'department.deleted': 'grant',
   'department.head_assigned': 'grant',

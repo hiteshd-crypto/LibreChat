@@ -51,6 +51,9 @@ export default function AdminLayout() {
           {hierarchy?.isAdmin || isDeptHead
             ? item('/admin/token-distribution', localize('com_admin_token_title'))
             : null}
+          {hierarchy?.canReadAuditLog
+            ? item('/admin/audit-log', localize('com_admin_audit_log_title'))
+            : null}
           {item('/admin/users', localize('com_admin_users_title'))}
         </nav>
       </aside>

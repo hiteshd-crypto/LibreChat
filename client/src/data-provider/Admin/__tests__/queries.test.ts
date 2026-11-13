@@ -72,6 +72,7 @@ describe('useMyHierarchy', () => {
       canViewSubordinates: true,
       viewableRoleKeys: ['SALES_EMPLOYEE'],
       manageableRoleKeys: ['SALES_EMPLOYEE'],
+      canReadAuditLog: false,
     });
     const { result } = renderHook(() => useMyHierarchy(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));

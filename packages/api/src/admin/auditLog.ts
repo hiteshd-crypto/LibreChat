@@ -1,3 +1,4 @@
+import { resolveDisplayAction, resolveDisplayMetadata } from 'librechat-data-provider';
 import {
   logger,
   AUDIT_ACTIONS,
@@ -176,31 +177,29 @@ function escapeCsvCell(value: string): string {
   return guarded;
 }
 
-function stringifyMetaValue(value: unknown): string {
-  if (value == null) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return '';
-}
+/** No per-request "viewer's locale" exists on the backend the way the UI has
+ * one, so the export fixes Indian digit grouping explicitly — this app's
+ * token credits are always ₹-denominated. */
+const CSV_LOCALE = 'en-IN';
 
 const CSV_COLUMNS: ReadonlyArray<{ label: string; value: (e: AdminAuditLogEntry) => string }> = [
   { label: 'Timestamp', value: (e) => e.timestamp },
   { label: 'Category', value: (e) => e.category },
-  { label: 'Action', value: (e) => e.action },
+  { label: 'Action', value: (e) => resolveDisplayAction(e) },
   { label: 'Outcome', value: (e) => e.outcome },
   { label: 'Severity', value: (e) => e.severity },
   { label: 'Actor type', value: (e) => e.actor.type },
   { label: 'Actor', value: (e) => e.actor.name },
-  { label: 'Actor ID', value: (e) => e.actor.id ?? '' },
   { label: 'Target type', value: (e) => e.target.type },
   { label: 'Target', value: (e) => e.target.name ?? '' },
-  { label: 'Target ID', value: (e) => e.target.id ?? '' },
-  { label: 'Capability', value: (e) => stringifyMetaValue(e.metadata?.capability) },
-  { label: 'Details', value: (e) => (e.metadata ? JSON.stringify(e.metadata) : '') },
-  { label: 'IP', value: (e) => e.context?.ip ?? '' },
-  { label: 'Request ID', value: (e) => e.context?.requestId ?? '' },
-  { label: 'Seq', value: (e) => String(e.integrity.seq) },
-  { label: 'Hash', value: (e) => e.integrity.hash },
+  {
+    label: 'Details',
+    value: (e) => {
+      const displayMetadata = resolveDisplayMetadata(e.action, e.metadata, CSV_LOCALE);
+      return displayMetadata ? JSON.stringify(displayMetadata) : '';
+    },
+  },
+  { label: 'IP', value: (e) => (e.context?.ip ?? '').replace(/^::ffff:/i, '') },
 ];
 
 function formatCsvHeader(): string {

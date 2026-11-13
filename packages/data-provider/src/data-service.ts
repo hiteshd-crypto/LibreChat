@@ -1431,6 +1431,33 @@ export function confirmAdminTokenGrant(
   return request.post(endpoints.adminTokenGrantConfirm(), body);
 }
 
+/* Admin — Audit log (backed by /api/admin/audit-log*) */
+export function getAdminAuditLog(
+  params?: adm.TAdminAuditLogListParams,
+): Promise<adm.TAdminAuditLogListResponse> {
+  return request.get(endpoints.adminAuditLog(params));
+}
+
+export function getAdminAuditLogEntry(id: string): Promise<{ entry: adm.TAdminAuditLogEntry }> {
+  return request.get(endpoints.adminAuditLogEntry(id));
+}
+
+export function verifyAdminAuditLog(): Promise<adm.TAdminAuditLogVerifyResponse> {
+  return request.get(endpoints.adminAuditLogVerify());
+}
+
+export async function exportAdminAuditLogCsv(params?: {
+  action?: string;
+  outcome?: string;
+  from?: string;
+  to?: string;
+}): Promise<Blob> {
+  const response = await request.getResponse<Blob>(endpoints.adminAuditLogExportCsv(params), {
+    responseType: 'blob',
+  });
+  return response.data;
+}
+
 export function listAdminRoleMembers(
   roleKey: string,
   params?: { limit?: number; offset?: number },

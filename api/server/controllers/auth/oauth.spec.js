@@ -4,6 +4,7 @@ const mockIsAdminPanelRedirect = jest.fn();
 const mockGenerateAdminExchangeCode = jest.fn();
 const mockSyncUserEntraGroupMemberships = jest.fn();
 const mockSetAuthTokens = jest.fn();
+const mockRecordAdminLoginAudit = jest.fn();
 const mockSendOpenIDAuthResponse = jest.fn();
 const mockGetLogStores = jest.fn();
 const mockCheckBan = jest.fn();
@@ -32,6 +33,7 @@ jest.mock('~/server/services/PermissionService', () => ({
 
 jest.mock('~/server/services/AuthService', () => ({
   setAuthTokens: (...args) => mockSetAuthTokens(...args),
+  recordAdminLoginAudit: (...args) => mockRecordAdminLoginAudit(...args),
 }));
 
 jest.mock('~/server/services/OpenIDRefreshRecovery', () => ({

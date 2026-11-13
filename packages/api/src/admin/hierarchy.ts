@@ -40,12 +40,17 @@ export function createAdminHierarchyHandlers(deps: AdminHierarchyDeps): {
       const isAdmin =
         role === SystemRoles.ADMIN ||
         (await hasCapability(capabilityUser, SystemCapabilities.ACCESS_ADMIN));
+      const canReadAuditLog = await hasCapability(
+        capabilityUser,
+        SystemCapabilities.READ_AUDIT_LOG,
+      );
       if (isAdmin) {
         return res.status(200).json({
           isAdmin: true,
           canViewSubordinates: true,
           viewableRoleKeys: [],
           manageableRoleKeys: [],
+          canReadAuditLog,
         });
       }
 
@@ -82,6 +87,7 @@ export function createAdminHierarchyHandlers(deps: AdminHierarchyDeps): {
         viewableRoleKeys: roleKeys,
         manageableRoleKeys: roleKeys,
         departmentHead,
+        canReadAuditLog,
       });
     } catch (error) {
       logger.error('[adminHierarchy] getMyHierarchy error:', error);

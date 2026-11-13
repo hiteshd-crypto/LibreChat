@@ -421,9 +421,81 @@ describe('createAdminAuditLogHandlers', () => {
       await handlers.exportAuditLogCsv(ctx.req, ctx.res);
       expect(ctx.chunks[0]).toBe('﻿');
       expect(ctx.chunks[1]).toContain('Timestamp');
-      expect(ctx.chunks[1]).toContain('Hash');
+      expect(ctx.chunks[1]).toContain('Details');
       expect(ctx.chunks[2]).toBe('\r\n');
       expect(ctx.endCalled()).toBe(true);
+    });
+
+    it('omits the Actor ID, Target ID, Capability, Request ID, Seq, and Hash columns', async () => {
+      const deps = createDeps({ streamAuditLogEntries: streamFrom([mockEntry()]) });
+      const handlers = createAdminAuditLogHandlers(deps);
+      const ctx = createCsvContext();
+      await handlers.exportAuditLogCsv(ctx.req, ctx.res);
+      const headerCells = ctx.chunks[1].split(',');
+      expect(headerCells).toEqual([
+        'Timestamp',
+        'Category',
+        'Action',
+        'Outcome',
+        'Severity',
+        'Actor type',
+        'Actor',
+        'Target type',
+        'Target',
+        'Details',
+        'IP',
+      ]);
+    });
+
+    it('strips the ::ffff: IPv4-mapped prefix from the IP column', async () => {
+      const entry = mockEntry({ context: { ip: '::ffff:10.5.48.29' } });
+      const deps = createDeps({ streamAuditLogEntries: streamFrom([entry]) });
+      const handlers = createAdminAuditLogHandlers(deps);
+      const ctx = createCsvContext();
+      await handlers.exportAuditLogCsv(ctx.req, ctx.res);
+      const row = ctx.chunks[3];
+      expect(row).toContain('10.5.48.29');
+      expect(row).not.toContain('::ffff:');
+    });
+
+    it('money-formats token-amount fields in the Details column', async () => {
+      const entry = mockEntry({
+        action: 'balance.departmental_distribution',
+        category: 'balance',
+        metadata: { kind: 'department_pool_grant', amount: 1_000_000 },
+      });
+      const deps = createDeps({ streamAuditLogEntries: streamFrom([entry]) });
+      const handlers = createAdminAuditLogHandlers(deps);
+      const ctx = createCsvContext();
+      await handlers.exportAuditLogCsv(ctx.req, ctx.res);
+      const row = ctx.chunks[3];
+      expect(row).toContain('department_pool_grant');
+      expect(row).toContain('100');
+      expect(row).not.toContain('1000000');
+    });
+
+    it('remaps a legacy balance.token_grant entry to the specific action, matching the UI', async () => {
+      const entry = mockEntry({
+        action: 'balance.token_grant',
+        category: 'balance',
+        metadata: { kind: 'department_disbursement' },
+      });
+      const deps = createDeps({ streamAuditLogEntries: streamFrom([entry]) });
+      const handlers = createAdminAuditLogHandlers(deps);
+      const ctx = createCsvContext();
+      await handlers.exportAuditLogCsv(ctx.req, ctx.res);
+      const row = ctx.chunks[3];
+      expect(row).toContain('balance.internal_distribution');
+      expect(row).not.toContain('balance.token_grant');
+    });
+
+    it('leaves non-balance metadata (e.g. capability grants) unformatted', async () => {
+      const deps = createDeps({ streamAuditLogEntries: streamFrom([mockEntry()]) });
+      const handlers = createAdminAuditLogHandlers(deps);
+      const ctx = createCsvContext();
+      await handlers.exportAuditLogCsv(ctx.req, ctx.res);
+      const row = ctx.chunks[3];
+      expect(row).toContain('manage:users');
     });
 
     it('defangs formula-injection cells and quotes special characters', async () => {

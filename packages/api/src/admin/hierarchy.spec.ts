@@ -32,8 +32,22 @@ describe('createAdminHierarchyHandlers', () => {
       canViewSubordinates: true,
       viewableRoleKeys: [],
       manageableRoleKeys: [],
+      canReadAuditLog: true,
     });
     expect(getDescendantRoleKeys).not.toHaveBeenCalled();
+  });
+
+  it('reflects READ_AUDIT_LOG=false for an ADMIN lacking that capability', async () => {
+    const handlers = createAdminHierarchyHandlers({
+      hasCapability: jest.fn(capabilityHeld(SystemCapabilities.ACCESS_ADMIN)),
+      getDescendantRoleKeys: jest.fn(),
+      getDepartmentForRoleKey: jest.fn(),
+    });
+    const { req, res, json } = createReqRes({ id: 'admin-2', role: SystemRoles.ADMIN });
+
+    await handlers.getMyHierarchy(req, res);
+
+    expect(json).toHaveBeenCalledWith(expect.objectContaining({ canReadAuditLog: false }));
   });
 
   it('returns descendant role names for a VIEW_SUBORDINATES holder', async () => {
@@ -52,7 +66,21 @@ describe('createAdminHierarchyHandlers', () => {
       viewableRoleKeys: ['SALES_EMPLOYEE'],
       manageableRoleKeys: ['SALES_EMPLOYEE'],
       departmentHead: undefined,
+      canReadAuditLog: false,
     });
+  });
+
+  it('reflects READ_AUDIT_LOG=true for a non-admin holder of that capability', async () => {
+    const handlers = createAdminHierarchyHandlers({
+      hasCapability: jest.fn(capabilityHeld(SystemCapabilities.READ_AUDIT_LOG)),
+      getDescendantRoleKeys: jest.fn().mockResolvedValue([]),
+      getDepartmentForRoleKey: jest.fn(),
+    });
+    const { req, res, json } = createReqRes({ id: 'auditor-1', role: 'AUDITOR' });
+
+    await handlers.getMyHierarchy(req, res);
+
+    expect(json).toHaveBeenCalledWith(expect.objectContaining({ canReadAuditLog: true }));
   });
 
   it('returns empty access for a plain USER', async () => {
@@ -72,6 +100,7 @@ describe('createAdminHierarchyHandlers', () => {
       viewableRoleKeys: [],
       manageableRoleKeys: [],
       departmentHead: undefined,
+      canReadAuditLog: false,
     });
     expect(getDescendantRoleKeys).not.toHaveBeenCalled();
   });
