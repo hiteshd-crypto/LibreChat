@@ -7,7 +7,6 @@ import {
   TableCell,
   TableRow,
   TableRowHeader,
-  ControlCombobox,
   useToastContext,
 } from '@librechat/client';
 import type { TAdminPricingRate, TAdminPricingMutationResponse } from 'librechat-data-provider';
@@ -23,16 +22,10 @@ interface RowErrors {
   completion?: string;
 }
 
-type ModelItem = { label: string; value: string };
-
 interface PricingRowProps {
   /** The stored rate; omitted for the Add New draft row, which starts in edit mode. */
   rate?: TAdminPricingRate;
   existingKeys: ReadonlySet<string>;
-  /** Stored rates by `modelKey`: selecting a model in the row dropdown reads its rates from here. */
-  ratesByKey: ReadonlyMap<string, TAdminPricingRate>;
-  /** Dropdown options: every stored `modelKey`. */
-  modelItems: ModelItem[];
   /** Draft rows only: called on cancel and after a successful create. */
   onDiscard?: () => void;
   onRequestDelete?: (rate: TAdminPricingRate) => void;
@@ -52,8 +45,6 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 export default function PricingRow({
   rate,
   existingKeys,
-  ratesByKey,
-  modelItems,
   onDiscard,
   onRequestDelete,
 }: PricingRowProps) {
@@ -63,9 +54,7 @@ export default function PricingRow({
   const updateMutation = useUpdatePricingRate();
 
   const isNew = rate == null;
-  const [selectedKey, setSelectedKey] = useState(rate?.modelKey ?? '');
-  /** The stored entry this row currently shows: the dropdown selection, else the row's own model. */
-  const current = rate ? (ratesByKey.get(selectedKey) ?? rate) : undefined;
+  const current = rate;
   const [editing, setEditing] = useState(isNew);
   const [modelKey, setModelKey] = useState('');
   const [prompt, setPrompt] = useState(rate ? String(rate.prompt) : '');
@@ -80,12 +69,6 @@ export default function PricingRow({
       modelRef.current?.focus();
     }
   }, [isNew]);
-
-  const selectModel = (key: string) => {
-    setSelectedKey(key);
-    setErrors({});
-    setEditing(false);
-  };
 
   const startEditing = () => {
     if (!current) {
@@ -184,19 +167,7 @@ export default function PricingRow({
     <TableRow className="border-b border-border-light">
       {current ? (
         <TableRowHeader className="p-3 align-top text-text-primary">
-          <ControlCombobox
-            selectedValue={current.modelKey}
-            displayValue={current.modelKey}
-            items={modelItems}
-            setValue={selectModel}
-            ariaLabel={localize('com_admin_pricing_model_select_for', { 0: current.modelKey })}
-            searchPlaceholder={localize('com_admin_pricing_model_search')}
-            selectPlaceholder={localize('com_admin_pricing_model_label')}
-            isCollapsed={false}
-            showCarat={true}
-            variant="field"
-            disabled={saving || editing}
-          />
+          {current.modelKey}
         </TableRowHeader>
       ) : (
         <TableCell className="p-3 align-top">

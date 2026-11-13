@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Button,
-  Input,
+  ControlCombobox,
   Spinner,
   Table,
   TableBody,
@@ -16,25 +16,30 @@ import { useLocalize } from '~/hooks';
 import PricingRow from './PricingRow';
 
 const HEAD_CLASS = 'px-3 py-2 text-left font-medium text-text-secondary';
+const MASTER_SELECT_ID = 'admin-pricing-master-select';
 
 export default function PricingView() {
   const localize = useLocalize();
   const { data, isLoading, isError } = useAdminPricing();
-  const [search, setSearch] = useState('');
   const [adding, setAdding] = useState(false);
+  const [displayedKeys, setDisplayedKeys] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<TAdminPricingRate | null>(null);
 
   const rates = useMemo(() => data?.rates ?? [], [data]);
   const existingKeys = useMemo(() => new Set(rates.map((r) => r.modelKey)), [rates]);
-  const ratesByKey = useMemo(() => new Map(rates.map((r) => [r.modelKey, r])), [rates]);
   const modelItems = useMemo(
-    () => rates.map((r) => ({ label: r.modelKey, value: r.modelKey })),
-    [rates],
+    () =>
+      rates.map((r) => ({
+        label: r.modelKey,
+        value: r.modelKey,
+        selected: displayedKeys.has(r.modelKey),
+      })),
+    [rates, displayedKeys],
   );
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? rates.filter((r) => r.modelKey.toLowerCase().includes(q)) : rates;
-  }, [rates, search]);
+  const displayed = useMemo(
+    () => rates.filter((r) => displayedKeys.has(r.modelKey)),
+    [rates, displayedKeys],
+  );
 
   if (isLoading) {
     return (
@@ -52,7 +57,21 @@ export default function PricingView() {
     );
   }
 
-  const showTable = visible.length > 0 || adding;
+  const toggleModel = (key: string) => {
+    setDisplayedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const clearAll = () => setDisplayedKeys(new Set());
+
+  const showTable = displayed.length > 0 || adding;
 
   return (
     <div className="flex flex-col gap-4">
@@ -64,16 +83,31 @@ export default function PricingView() {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label={localize('com_admin_pricing_search_placeholder')}
-          placeholder={localize('com_admin_pricing_search_placeholder')}
-          className="max-w-xs"
-        />
-        <Button variant="submit" type="button" disabled={adding} onClick={() => setAdding(true)}>
-          {localize('com_admin_pricing_add')}
-        </Button>
+        <div className="max-w-xs flex-grow">
+          <ControlCombobox
+            selectId={MASTER_SELECT_ID}
+            selectedValue=""
+            displayValue=""
+            items={modelItems}
+            setValue={toggleModel}
+            ariaLabel={localize('com_admin_pricing_model_select_label')}
+            searchPlaceholder={localize('com_admin_pricing_model_search')}
+            selectPlaceholder={localize('com_admin_pricing_model_select_label')}
+            isCollapsed={false}
+            showCarat={true}
+            variant="field"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          {displayed.length > 0 ? (
+            <Button variant="outline" type="button" onClick={clearAll}>
+              {localize('com_admin_pricing_clear_all')}
+            </Button>
+          ) : null}
+          <Button variant="submit" type="button" disabled={adding} onClick={() => setAdding(true)}>
+            {localize('com_admin_pricing_add')}
+          </Button>
+        </div>
       </div>
 
       {showTable ? (
@@ -96,20 +130,13 @@ export default function PricingView() {
           </TableHeader>
           <TableBody>
             {adding ? (
-              <PricingRow
-                existingKeys={existingKeys}
-                ratesByKey={ratesByKey}
-                modelItems={modelItems}
-                onDiscard={() => setAdding(false)}
-              />
+              <PricingRow existingKeys={existingKeys} onDiscard={() => setAdding(false)} />
             ) : null}
-            {visible.map((rate) => (
+            {displayed.map((rate) => (
               <PricingRow
                 key={rate.modelKey}
                 rate={rate}
                 existingKeys={existingKeys}
-                ratesByKey={ratesByKey}
-                modelItems={modelItems}
                 onRequestDelete={setDeleteTarget}
               />
             ))}
@@ -117,7 +144,9 @@ export default function PricingView() {
         </Table>
       ) : (
         <p role="status" className="text-sm text-text-secondary">
-          {localize(rates.length === 0 ? 'com_admin_pricing_empty' : 'com_admin_pricing_no_match')}
+          {localize(
+            rates.length === 0 ? 'com_admin_pricing_empty' : 'com_admin_pricing_select_prompt',
+          )}
         </p>
       )}
 

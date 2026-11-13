@@ -89,6 +89,7 @@ function ControlCombobox({
     value: option.value as string | undefined,
     label: option.label,
     icon: option.icon,
+    selected: option.selected,
   });
 
   const combobox = Ariakit.useComboboxStore({
@@ -228,14 +229,16 @@ function ControlCombobox({
         <div className="max-h-[300px] overflow-auto">
           <Ariakit.ComboboxList store={combobox}>
             <SelectRenderer store={select} items={matches} itemSize={ROW_HEIGHT} overscan={5}>
-              {({ value, icon, label, ...item }) => (
+              {({ value, icon, label, selected, ...item }) => (
                 <Ariakit.ComboboxItem
                   key={item.id}
                   {...item}
+                  aria-selected={selected}
                   className={cn(
                     'flex w-full cursor-pointer items-center px-3 text-sm',
                     'text-text-primary hover:bg-surface-tertiary',
                     'data-[active-item]:bg-surface-tertiary',
+                    selected && 'bg-surface-tertiary',
                   )}
                   render={<Ariakit.SelectItem value={value} />}
                 >

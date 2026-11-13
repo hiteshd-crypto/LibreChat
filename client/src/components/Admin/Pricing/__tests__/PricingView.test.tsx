@@ -36,15 +36,16 @@ jest.mock('@librechat/client', () => ({
   TableHead: ({ children, ...props }: any) => <th {...props}>{children}</th>,
   TableCell: ({ children }: any) => <td>{children}</td>,
   TableRowHeader: ({ children }: any) => <th scope="row">{children}</th>,
-  ControlCombobox: ({ items, selectedValue, setValue, ariaLabel, disabled }: any) => (
+  ControlCombobox: ({ items, setValue, ariaLabel, disabled }: any) => (
     <select
       aria-label={ariaLabel}
-      value={selectedValue}
+      value=""
       disabled={disabled}
       onChange={(e) => setValue(e.target.value)}
     >
+      <option value="" />
       {items.map((item: any) => (
-        <option key={item.value} value={item.value}>
+        <option key={item.value} value={item.value} aria-selected={item.selected}>
           {item.label}
         </option>
       ))}
@@ -69,6 +70,11 @@ const rates = [
 const ready = (list = rates) =>
   mockUseAdminPricing.mockReturnValue({ data: { rates: list }, isLoading: false, isError: false });
 
+const masterDropdown = () => screen.getByLabelText('com_admin_pricing_model_select_label');
+
+/** Picks a model from the master dropdown, adding or removing its row. */
+const pickModel = (model: string) => userEvent.selectOptions(masterDropdown(), model);
+
 beforeEach(() => {
   jest.clearAllMocks();
   ready();
@@ -87,113 +93,82 @@ describe('PricingView', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('com_admin_pricing_load_error');
   });
 
-  it('shows the empty state and still offers Add New', () => {
+  it('shows the empty state when there are no rates, and still offers Add New', () => {
     ready([]);
     render(<PricingView />);
     expect(screen.getByRole('status')).toHaveTextContent('com_admin_pricing_empty');
     expect(screen.getByRole('button', { name: 'com_admin_pricing_add' })).toBeEnabled();
   });
 
-  it('lists rates read-only with semantic table markup', () => {
+  it('shows a select prompt and no table until a model is chosen', () => {
     render(<PricingView />);
+    expect(screen.getByRole('status')).toHaveTextContent('com_admin_pricing_select_prompt');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'com_admin_pricing_clear_all' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('lists every stored model in the master dropdown regardless of selection', async () => {
+    render(<PricingView />);
+    await pickModel('gpt-4o');
+    const options = Array.from(masterDropdown().querySelectorAll('option'))
+      .map((o) => o.textContent)
+      .filter(Boolean);
+    expect(options).toEqual(['claude-3', 'gpt-4o']);
+  });
+
+  it('marks a displayed model as selected in the dropdown, including for assistive tech', async () => {
+    render(<PricingView />);
+    await pickModel('gpt-4o');
+    const option = within(masterDropdown()).getByText('gpt-4o');
+    expect(option).toHaveAttribute('aria-selected', 'true');
+    const other = within(masterDropdown()).getByText('claude-3');
+    expect(other).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('adds a row read-only with semantic table markup when a model is picked', async () => {
+    render(<PricingView />);
+    await pickModel('gpt-4o');
     expect(screen.getAllByRole('columnheader')).toHaveLength(4);
-    expect(screen.getAllByRole('rowheader')).toHaveLength(2);
-    expect(screen.getByLabelText('com_admin_pricing_model_select_for:gpt-4o')).toHaveValue(
-      'gpt-4o',
-    );
+    expect(screen.getAllByRole('rowheader')).toHaveLength(1);
+    expect(screen.getByRole('rowheader')).toHaveTextContent('gpt-4o');
     const prompt = screen.getByLabelText('com_admin_pricing_prompt_for:gpt-4o');
     expect(prompt).toHaveValue('2.5');
     expect(prompt).toHaveAttribute('readonly');
   });
 
-  it('filters rows by model name and reports no match', async () => {
+  it('accumulates multiple selections instead of replacing the previous one', async () => {
     render(<PricingView />);
-    const search = screen.getByLabelText('com_admin_pricing_search_placeholder');
-    await userEvent.type(search, 'gpt');
-    expect(
-      screen.queryByLabelText('com_admin_pricing_model_select_for:claude-3'),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText('com_admin_pricing_model_select_for:gpt-4o')).toBeInTheDocument();
-    await userEvent.clear(search);
-    await userEvent.type(search, 'zzz');
-    expect(screen.getByRole('status')).toHaveTextContent('com_admin_pricing_no_match');
+    await pickModel('gpt-4o');
+    await pickModel('claude-3');
+    expect(screen.getAllByRole('rowheader').map((el) => el.textContent)).toEqual([
+      'claude-3',
+      'gpt-4o',
+    ]);
   });
 
-  describe('model dropdown', () => {
-    const dropdown = (model: string) =>
-      screen.getByLabelText(`com_admin_pricing_model_select_for:${model}`);
+  it('toggles a model off when picked again, without duplicating rows', async () => {
+    render(<PricingView />);
+    await pickModel('gpt-4o');
+    await pickModel('gpt-4o');
+    expect(screen.queryAllByRole('rowheader')).toHaveLength(0);
+    expect(screen.getByRole('status')).toHaveTextContent('com_admin_pricing_select_prompt');
+  });
 
-    it('lists the stored model keys as options', () => {
-      render(<PricingView />);
-      const options = Array.from(dropdown('gpt-4o').querySelectorAll('option')).map(
-        (o) => o.textContent,
-      );
-      expect(options).toEqual(['claude-3', 'gpt-4o']);
-    });
-
-    /** Switching a row to another model leaves two rows showing it, so scope to the switched row. */
-    const switchRow = async (from: string, to: string) => {
-      const row = dropdown(from).closest('tr') as HTMLElement;
-      await userEvent.selectOptions(within(row).getByRole('combobox'), to);
-      return within(row);
-    };
-
-    it("populates the row's rates from the selected model's stored entry", async () => {
-      render(<PricingView />);
-      const row = await switchRow('gpt-4o', 'claude-3');
-      expect(row.getByLabelText('com_admin_pricing_prompt_for:claude-3')).toHaveValue('3');
-      expect(row.getByLabelText('com_admin_pricing_completion_for:claude-3')).toHaveValue('15');
-    });
-
-    it('makes Update and Delete act on the selected model', async () => {
-      render(<PricingView />);
-      const row = await switchRow('gpt-4o', 'claude-3');
-
-      await userEvent.click(
-        row.getByRole('button', { name: 'com_admin_pricing_delete_for:claude-3' }),
-      );
-      await userEvent.click(
-        within(screen.getByRole('dialog')).getByRole('button', { name: 'com_ui_delete' }),
-      );
-      expect(mockDelete).toHaveBeenCalledWith({ modelKey: 'claude-3' }, expect.anything());
-    });
-
-    it('saves edits to the selected model', async () => {
-      render(<PricingView />);
-      const row = await switchRow('gpt-4o', 'claude-3');
-      await userEvent.click(
-        row.getByRole('button', { name: 'com_admin_pricing_update_for:claude-3' }),
-      );
-      const prompt = row.getByLabelText('com_admin_pricing_prompt_for:claude-3');
-      await userEvent.clear(prompt);
-      await userEvent.type(prompt, '4');
-      await userEvent.click(row.getByRole('button', { name: 'com_ui_save' }));
-      expect(mockUpdate).toHaveBeenCalledWith(
-        { modelKey: 'claude-3', updates: { prompt: 4, completion: 15 } },
-        expect.anything(),
-      );
-    });
-
-    it('is disabled while the row is being edited', async () => {
-      render(<PricingView />);
-      await userEvent.click(
-        screen.getByRole('button', { name: 'com_admin_pricing_update_for:gpt-4o' }),
-      );
-      expect(dropdown('gpt-4o')).toBeDisabled();
-    });
-
-    it('shows the switched row read-only', async () => {
-      render(<PricingView />);
-      const row = await switchRow('gpt-4o', 'claude-3');
-      expect(row.getByLabelText('com_admin_pricing_prompt_for:claude-3')).toHaveAttribute(
-        'readonly',
-      );
-    });
+  it('clears every displayed row via Clear All without deleting anything', async () => {
+    render(<PricingView />);
+    await pickModel('gpt-4o');
+    await pickModel('claude-3');
+    await userEvent.click(screen.getByRole('button', { name: 'com_admin_pricing_clear_all' }));
+    expect(screen.queryAllByRole('rowheader')).toHaveLength(0);
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   describe('update', () => {
     it('makes the row editable and saves only valid values', async () => {
       render(<PricingView />);
+      await pickModel('gpt-4o');
       await userEvent.click(
         screen.getByRole('button', { name: 'com_admin_pricing_update_for:gpt-4o' }),
       );
@@ -217,6 +192,7 @@ describe('PricingView', () => {
 
     it('discards edits on cancel', async () => {
       render(<PricingView />);
+      await pickModel('gpt-4o');
       await userEvent.click(
         screen.getByRole('button', { name: 'com_admin_pricing_update_for:gpt-4o' }),
       );
@@ -277,6 +253,7 @@ describe('PricingView', () => {
   describe('delete', () => {
     it('asks for confirmation before deleting', async () => {
       render(<PricingView />);
+      await pickModel('gpt-4o');
       await userEvent.click(
         screen.getByRole('button', { name: 'com_admin_pricing_delete_for:gpt-4o' }),
       );
