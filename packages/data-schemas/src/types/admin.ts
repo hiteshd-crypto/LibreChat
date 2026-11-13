@@ -56,6 +56,7 @@ export const AUDIT_CATEGORIES = [
   'permission',
   'auth',
   'approval',
+  'balance',
 ] as const;
 export type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
 
@@ -68,6 +69,7 @@ export type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
 export const AUDIT_ACTIONS = [
   'grant.assigned',
   'grant.removed',
+  'balance.edited',
   'department.created',
   'department.deleted',
   'department.head_assigned',
@@ -78,6 +80,7 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export const AUDIT_ACTION_CATEGORY: Record<AuditAction, AuditCategory> = {
   'grant.assigned': 'grant',
   'grant.removed': 'grant',
+  'balance.edited': 'balance',
   'department.created': 'grant',
   'department.deleted': 'grant',
   'department.head_assigned': 'grant',

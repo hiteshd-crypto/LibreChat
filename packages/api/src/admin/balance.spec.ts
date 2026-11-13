@@ -14,7 +14,11 @@ const userId = new Types.ObjectId().toString();
 
 function createDeps(overrides: Partial<AdminBalanceDeps> = {}): AdminBalanceDeps {
   return {
-    getUserById: jest.fn().mockResolvedValue({ _id: userId } as unknown as IUser),
+    // Defaults to an ACCESS_ADMIN caller so every pre-existing test (written before the
+    // DEPARTMENT_HEAD view-only scoping was added) keeps passing unscoped.
+    hasCapability: jest.fn().mockResolvedValue(true),
+    isDescendantOf: jest.fn().mockResolvedValue(false),
+    getUserById: jest.fn().mockResolvedValue({ _id: userId, role: 'editor' } as unknown as IUser),
     findBalanceByUser: jest.fn().mockResolvedValue({ tokenCredits: 5000 }),
     upsertBalanceFields: jest.fn().mockResolvedValue({ tokenCredits: 7500 }),
     setBalanceIfUnchanged: jest
@@ -25,11 +29,19 @@ function createDeps(overrides: Partial<AdminBalanceDeps> = {}): AdminBalanceDeps
 }
 
 function createReqRes(
-  overrides: { params?: Record<string, string>; body?: Record<string, unknown> } = {},
+  overrides: {
+    params?: Record<string, string>;
+    body?: Record<string, unknown>;
+    user?: { _id?: Types.ObjectId; id?: string; role?: string; tenantId?: string } | null;
+  } = {},
 ) {
   const req = {
     params: overrides.params ?? { userId },
     body: overrides.body ?? {},
+    user:
+      overrides.user === null
+        ? undefined
+        : (overrides.user ?? { _id: new Types.ObjectId(), role: 'ADMIN' }),
   } as unknown as ServerRequest;
   const json = jest.fn();
   const status = jest.fn().mockReturnValue({ json });
@@ -76,6 +88,71 @@ describe('createAdminBalanceHandlers', () => {
       const { req, res, status } = createReqRes();
       await createAdminBalanceHandlers(deps).getBalance(req, res);
       expect(status).toHaveBeenCalledWith(500);
+    });
+
+    describe('DEPARTMENT_HEAD scoping', () => {
+      const headId = new Types.ObjectId();
+
+      function deptHeadDeps(overrides: Partial<AdminBalanceDeps> = {}) {
+        return createDeps({
+          hasCapability: jest.fn((_user, capability) =>
+            Promise.resolve(
+              capability === 'read:subordinates' || capability === 'manage:department',
+            ),
+          ) as unknown as AdminBalanceDeps['hasCapability'],
+          ...overrides,
+        });
+      }
+
+      it('allows a Department Head to view their own balance', async () => {
+        const deps = deptHeadDeps({
+          getUserById: jest
+            .fn()
+            .mockResolvedValue({ _id: userId, role: 'DEPT_HEAD' } as unknown as IUser),
+        });
+        const { req, res, status } = createReqRes({
+          user: { _id: headId, role: 'DEPT_HEAD' },
+        });
+        await createAdminBalanceHandlers(deps).getBalance(req, res);
+        expect(status).toHaveBeenCalledWith(200);
+      });
+
+      it('allows a Department Head to view a current descendant', async () => {
+        const deps = deptHeadDeps({
+          getUserById: jest
+            .fn()
+            .mockResolvedValue({ _id: userId, role: 'JUNIOR' } as unknown as IUser),
+          isDescendantOf: jest.fn().mockResolvedValue(true),
+        });
+        const { req, res, status } = createReqRes({
+          user: { _id: headId, role: 'DEPT_HEAD' },
+        });
+        await createAdminBalanceHandlers(deps).getBalance(req, res);
+        expect(deps.isDescendantOf).toHaveBeenCalledWith('JUNIOR', 'DEPT_HEAD');
+        expect(status).toHaveBeenCalledWith(200);
+      });
+
+      it('403s a Department Head viewing a user outside their own department', async () => {
+        const deps = deptHeadDeps({
+          getUserById: jest
+            .fn()
+            .mockResolvedValue({ _id: userId, role: 'OTHER_DEPT' } as unknown as IUser),
+          isDescendantOf: jest.fn().mockResolvedValue(false),
+        });
+        const { req, res, status } = createReqRes({
+          user: { _id: headId, role: 'DEPT_HEAD' },
+        });
+        await createAdminBalanceHandlers(deps).getBalance(req, res);
+        expect(status).toHaveBeenCalledWith(403);
+        expect(deps.findBalanceByUser).not.toHaveBeenCalled();
+      });
+
+      it('403s a caller with neither ACCESS_ADMIN nor DEPARTMENT_HEAD', async () => {
+        const deps = createDeps({ hasCapability: jest.fn().mockResolvedValue(false) });
+        const { req, res, status } = createReqRes({ user: { _id: headId, role: 'PLAIN_USER' } });
+        await createAdminBalanceHandlers(deps).getBalance(req, res);
+        expect(status).toHaveBeenCalledWith(403);
+      });
     });
   });
 
