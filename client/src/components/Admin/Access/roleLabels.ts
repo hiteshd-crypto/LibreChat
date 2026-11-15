@@ -4,8 +4,13 @@ import type { TAdminRole } from 'librechat-data-provider';
  * Builds a display label per `roleKey`. When a `name` is unique among the given
  * roles the label is just the name; when ≥2 roles share it, those get
  * `` `${name} — ${parentName}` ``, walking further up the ancestor chain until
- * every colliding label is distinct. Sibling uniqueness (enforced server-side)
- * guarantees this terminates.
+ * every colliding label is distinct. True siblings (same immediate parent)
+ * sharing a name — allowed since sibling-name uniqueness was removed — can
+ * never be distinguished this way, since every ancestor they'd append is
+ * identical; once the chain is exhausted without resolving the collision, each
+ * falls back to its plain `name` rather than showing an identical, uselessly
+ * "disambiguated" label on every colliding row (the row's own member/subtitle
+ * is what actually tells them apart in that case).
  */
 export function buildRoleLabels(roles: TAdminRole[]): Map<string, string> {
   const byKey = new Map(roles.map((r) => [r.roleKey, r]));
@@ -35,6 +40,9 @@ export function buildRoleLabels(roles: TAdminRole[]): Map<string, string> {
       depth += 1;
       const next = chain(role, byKey, depth);
       if (next === label) {
+        // Chain exhausted (hit the top-level root) without resolving the
+        // collision — these are true siblings; ancestor context can't help.
+        label = role.name;
         break;
       }
       label = next;

@@ -41,6 +41,22 @@ describe('buildRoleLabels', () => {
     expect(labels.get('c2')).toBe('LEAD — OPS — HR');
   });
 
+  it('falls back to the plain name for true siblings (same parent) sharing a name', () => {
+    // Matches the real scenario: two "Junior Accountant" roles directly under the
+    // same "Senior Accountant" parent. Every ancestor they'd append is identical,
+    // so the chain can never actually tell them apart — it must not show the same
+    // long, non-unique "disambiguated" label on both rows.
+    const roles = [
+      r('mgr', 'Accounting Manager'),
+      r('sr', 'Senior Accountant', 'mgr'),
+      r('c1', 'Junior Accountant', 'sr'),
+      r('c2', 'Junior Accountant', 'sr'),
+    ];
+    const labels = buildRoleLabels(roles);
+    expect(labels.get('c1')).toBe('Junior Accountant');
+    expect(labels.get('c2')).toBe('Junior Accountant');
+  });
+
   it('does not loop on a malformed cycle', () => {
     const roles = [r('x', 'DUP', 'y'), r('y', 'DUP', 'x')];
     const labels = buildRoleLabels(roles);

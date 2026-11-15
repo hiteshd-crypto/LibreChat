@@ -150,7 +150,36 @@ export function createRoleMethods(
       await role.save();
     }
 
+    await dropLegacySiblingNameIndex();
     await migrateRoleKeys();
+  }
+
+  /**
+   * One-time, idempotent cleanup: the compound unique index on `{parentRole, name,
+   * tenantId}` was removed from the schema when sibling role-name uniqueness was
+   * dropped, but Mongoose never drops an index that disappears from the schema —
+   * it only ever adds ones that are newly present. Any database that already had
+   * roles before that change keeps enforcing the old constraint at the MongoDB
+   * level even though the application no longer checks for it, silently turning
+   * a legitimate rename/create into a raw duplicate-key error. Safe to attempt on
+   * every boot: a database where the index is already gone (a fresh install, or
+   * one this has already run against) just gets "index not found" (code 27),
+   * which is swallowed; anything else is rethrown.
+   */
+  async function dropLegacySiblingNameIndex(): Promise<void> {
+    const Role = mongoose.models.Role;
+    try {
+      // eslint-disable-next-line no-restricted-syntax -- raw driver call to drop a legacy index Mongoose itself will never remove on its own.
+      await Role.collection.dropIndex('parentRole_1_name_1_tenantId_1');
+      logger.info('[initializeRoles] Dropped legacy parentRole_1_name_1_tenantId_1 index');
+    } catch (error) {
+      const code = (error as { code?: number; codeName?: string })?.code;
+      const codeName = (error as { code?: number; codeName?: string })?.codeName;
+      if (code === 27 || codeName === 'IndexNotFound') {
+        return;
+      }
+      throw error;
+    }
   }
 
   /**
