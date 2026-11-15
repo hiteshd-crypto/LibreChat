@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
+import { useNavigate } from 'react-router-dom';
 import { Input, Spinner, Button } from '@librechat/client';
 import type { TAdminRole } from 'librechat-data-provider';
 import MoveRoleDialog, { type MoveIntent } from './MoveRoleDialog';
@@ -127,6 +128,7 @@ export default function DepartmentTreeView({
   departmentName?: string;
 } = {}) {
   const localize = useLocalize();
+  const navigate = useNavigate();
   const { data, isLoading, isError } = useAdminRoles();
   const [search, setSearch] = useState('');
   const [editTarget, setEditTarget] = useState<TAdminRole | null>(null);
@@ -189,6 +191,15 @@ export default function DepartmentTreeView({
           className="max-w-xs"
         />
         <div className="flex items-center gap-2">
+          {departmentId != null ? (
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => navigate('/admin/access/unused-roles')}
+            >
+              {localize('com_admin_access_unused_roles_action')}
+            </Button>
+          ) : null}
           {scopeRootRoleKey === null && departmentId ? (
             <Button variant="outline" type="button" onClick={() => setSetHeadOpen(true)}>
               {localize('com_admin_department_set_head_action')}

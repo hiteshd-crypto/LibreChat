@@ -1,6 +1,7 @@
 export { default as AdminLayout } from './AdminLayout';
 export { default as AccessView } from './Access/AccessView';
 export { default as DepartmentTreeRoute } from './Access/DepartmentTreeRoute';
+export { default as UnusedRolesView } from './Access/UnusedRolesView';
 export { default as PricingView } from './Pricing/PricingView';
 export { default as BalanceView } from './Balance/BalanceView';
 export { default as TokenDistributionView } from './TokenDistribution/TokenDistributionView';

@@ -6,6 +6,12 @@ import type { ReactElement } from 'react';
 import DepartmentTreeView from '../DepartmentTreeView';
 
 const mockUseAdminRoles = jest.fn();
+const mockNavigate = jest.fn();
+
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}));
 
 const idleMutation = (mutate = jest.fn()) => ({
   mutate,
@@ -183,5 +189,28 @@ describe('DepartmentTreeView', () => {
     withDnd(<DepartmentTreeView scopeRootRoleKey={null} departmentId="dept-1" />);
     await userEvent.click(screen.getByText('com_admin_access_create_title'));
     expect(screen.getByText('com_admin_department_add_head_title')).toBeInTheDocument();
+  });
+
+  it('shows an Unused Roles button only for the Super Admin drill-down (departmentId set)', () => {
+    mockUseAdminRoles.mockReturnValue({
+      data: { roles: [r('ADMIN')], total: 1 },
+      isLoading: false,
+      isError: false,
+    });
+    withDnd(<DepartmentTreeView />);
+    expect(screen.queryByText('com_admin_access_unused_roles_action')).not.toBeInTheDocument();
+  });
+
+  it('navigates to the Unused Roles page when its button is clicked', async () => {
+    mockUseAdminRoles.mockReturnValue({
+      data: { roles: [r('ADMIN')], total: 1 },
+      isLoading: false,
+      isError: false,
+    });
+    withDnd(<DepartmentTreeView scopeRootRoleKey="root-key" departmentId="dept-1" />);
+    const button = screen.getByText('com_admin_access_unused_roles_action');
+    expect(button).toBeInTheDocument();
+    await userEvent.click(button);
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/access/unused-roles');
   });
 });

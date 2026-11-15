@@ -62,6 +62,8 @@ const loadAdminAccess = () =>
   import('~/components/Admin').then((m) => ({ Component: m.AccessView }));
 const loadAdminDepartmentTree = () =>
   import('~/components/Admin').then((m) => ({ Component: m.DepartmentTreeRoute }));
+const loadAdminUnusedRoles = () =>
+  import('~/components/Admin').then((m) => ({ Component: m.UnusedRolesView }));
 const loadAdminPricing = () =>
   import('~/components/Admin').then((m) => ({ Component: m.PricingView }));
 const loadAdminBalance = () =>
@@ -225,6 +227,7 @@ export const router = createBrowserRouter(
                   element: <Navigate to="/admin/access" replace={true} />,
                 },
                 { path: 'access', lazy: loadAdminAccess },
+                { path: 'access/unused-roles', lazy: loadAdminUnusedRoles },
                 { path: 'access/:departmentId', lazy: loadAdminDepartmentTree },
                 { path: 'pricing', lazy: loadAdminPricing },
                 { path: 'balance', lazy: loadAdminBalance },
