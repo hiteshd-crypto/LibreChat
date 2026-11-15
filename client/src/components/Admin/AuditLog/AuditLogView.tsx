@@ -51,11 +51,14 @@ export default function AuditLogView() {
   const locale = i18n.resolvedLanguage ?? i18n.language ?? 'en';
 
   const [page, setPage] = useState(1);
+  const [hasSearched, setHasSearched] = useState(false);
   const [filterDraft, setFilterDraft] = useState<AuditLogFilterDraft>(EMPTY_FILTER_DRAFT);
   const [appliedFilters, setAppliedFilters] = useState<
     Omit<TAdminAuditLogListParams, 'limit' | 'offset'>
   >({});
-  const { data, isLoading, isError } = useAdminAuditLog(page, appliedFilters);
+  const { data, isLoading, isError } = useAdminAuditLog(page, appliedFilters, {
+    enabled: hasSearched,
+  });
   const verifyAuditLog = useVerifyAdminAuditLog();
   const { data: departmentsData } = useDepartments();
   const departments = departmentsData?.departments ?? [];
@@ -63,6 +66,7 @@ export default function AuditLogView() {
   const handleViewLogs = () => {
     setAppliedFilters(toAppliedFilters(filterDraft));
     setPage(1);
+    setHasSearched(true);
   };
 
   const entries = data?.entries ?? [];
@@ -104,7 +108,9 @@ export default function AuditLogView() {
   };
 
   let body: ReactNode;
-  if (isLoading) {
+  if (!hasSearched) {
+    body = null;
+  } else if (isLoading) {
     body = (
       <div className="flex justify-center py-10">
         <Spinner />

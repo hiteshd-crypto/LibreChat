@@ -42,6 +42,10 @@ jest.mock('~/components/ui', () => ({
   ),
 }));
 
+function clickViewLogs() {
+  fireEvent.click(screen.getByText('com_admin_audit_log_view_logs'));
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockUseVerifyAdminAuditLog.mockReturnValue({ mutate: jest.fn(), isLoading: false });
@@ -51,15 +55,48 @@ beforeEach(() => {
 });
 
 describe('AuditLogView', () => {
-  it('shows a spinner while loading', () => {
+  it('renders nothing before View Logs is clicked, and does not enable the query', () => {
+    mockUseAdminAuditLog.mockReturnValue({
+      data: {
+        entries: [
+          {
+            id: 'e1',
+            action: 'balance.token_grant',
+            outcome: 'success',
+            actor: { type: 'user', id: 'u1', name: 'Admin' },
+            target: { type: 'department', id: 'd1', name: 'Finance' },
+            metadata: { kind: 'department_pool_grant', amount: 100 },
+            integrity: { seq: 1, hash: 'h', prevHash: 'p' },
+            timestamp: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        total: 1,
+        nextCursor: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<AuditLogView />);
+
+    expect(screen.queryByTestId('spinner')).not.toBeInTheDocument();
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+    expect(screen.queryByText('com_admin_audit_log_empty')).not.toBeInTheDocument();
+    expect(screen.queryByText('com_admin_audit_log_load_error')).not.toBeInTheDocument();
+    expect(mockUseAdminAuditLog).toHaveBeenLastCalledWith(1, {}, { enabled: false });
+  });
+
+  it('shows a spinner while loading, after View Logs is clicked', () => {
     mockUseAdminAuditLog.mockReturnValue({ data: undefined, isLoading: true, isError: false });
     render(<AuditLogView />);
+    clickViewLogs();
     expect(screen.getByTestId('spinner')).toBeInTheDocument();
+    expect(mockUseAdminAuditLog).toHaveBeenLastCalledWith(1, {}, { enabled: true });
   });
 
   it('shows an error message on failure', () => {
     mockUseAdminAuditLog.mockReturnValue({ data: undefined, isLoading: false, isError: true });
     render(<AuditLogView />);
+    clickViewLogs();
     expect(screen.getByText('com_admin_audit_log_load_error')).toBeInTheDocument();
   });
 
@@ -70,6 +107,7 @@ describe('AuditLogView', () => {
       isError: false,
     });
     render(<AuditLogView />);
+    clickViewLogs();
     expect(screen.getByText('com_admin_audit_log_empty')).toBeInTheDocument();
   });
 
@@ -95,6 +133,7 @@ describe('AuditLogView', () => {
       isError: false,
     });
     render(<AuditLogView />);
+    clickViewLogs();
     expect(screen.getByText('Admin')).toBeInTheDocument();
     expect(screen.getAllByText('Finance').length).toBeGreaterThan(0);
   });
@@ -107,20 +146,24 @@ describe('AuditLogView', () => {
     });
     render(<AuditLogView />);
 
-    expect(mockUseAdminAuditLog).toHaveBeenLastCalledWith(1, {});
+    expect(mockUseAdminAuditLog).toHaveBeenLastCalledWith(1, {}, { enabled: false });
 
     const departmentSelect = screen.getByDisplayValue('com_admin_audit_log_filter_department_all');
     fireEvent.change(departmentSelect, { target: { value: 'Finance' } });
     fireEvent.click(screen.getByTestId('pick-date-range'));
-    expect(mockUseAdminAuditLog).toHaveBeenLastCalledWith(1, {});
+    expect(mockUseAdminAuditLog).toHaveBeenLastCalledWith(1, {}, { enabled: false });
 
-    fireEvent.click(screen.getByText('com_admin_audit_log_view_logs'));
-    expect(mockUseAdminAuditLog).toHaveBeenLastCalledWith(1, {
-      targetType: 'department',
-      targetQuery: 'Finance',
-      from: '2026-01-01',
-      to: '2026-01-31',
-    });
+    clickViewLogs();
+    expect(mockUseAdminAuditLog).toHaveBeenLastCalledWith(
+      1,
+      {
+        targetType: 'department',
+        targetQuery: 'Finance',
+        from: '2026-01-01',
+        to: '2026-01-31',
+      },
+      { enabled: true },
+    );
   });
 
   it('hides metadata for capability grant/revoke rows but keeps it for other actions', () => {
@@ -155,6 +198,7 @@ describe('AuditLogView', () => {
       isError: false,
     });
     render(<AuditLogView />);
+    clickViewLogs();
 
     expect(screen.getByText('com_admin_audit_log_details_hidden')).toBeInTheDocument();
     expect(screen.queryByText('{"capability":"manage:department"}')).not.toBeInTheDocument();
